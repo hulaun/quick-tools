@@ -117,7 +117,7 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			Position(ui.Dpi(pad, listTop)).
 			Size(ui.Dpi(listW, listH)).
 			CtrlStyle(co.LVS_REPORT|co.LVS_SINGLESEL|co.LVS_NOCOLUMNHEADER).
-			CtrlExStyle(co.LVS_EX_FULLROWSELECT).
+			CtrlExStyle(co.LVS_EX_FULLROWSELECT|co.LVS_EX_DOUBLEBUFFER).
 			// One column holding "Group: Name". A separate group column was harder
 			// to read than simply writing the label out as a phrase.
 			//
@@ -376,6 +376,15 @@ func (p *Palette) position() {
 func (p *Palette) refilter() {
 	p.visible = p.index.Search(p.search.Text())
 
+	// Hold painting off while the list is torn down and rebuilt.
+	//
+	// Every delete and insert would otherwise repaint, and so would the scrollbar
+	// appearing or disappearing as the row count changes -- which is why the
+	// flicker only showed up once the list was long enough to need one. With
+	// redraw suppressed, all of that happens invisibly and the control paints
+	// once at the end.
+	p.list.SetRedraw(false)
+
 	p.list.DeleteAllItems()
 	for _, it := range p.visible {
 		p.list.AddItem(label(it))
@@ -386,6 +395,8 @@ func (p *Palette) refilter() {
 	if p.list.ColCount() > 0 {
 		p.list.Col(0).SetWidthToFill()
 	}
+
+	p.list.SetRedraw(true)
 	p.setSelection(0)
 }
 

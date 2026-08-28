@@ -213,16 +213,26 @@ of the panel at 150%, with every label truncated. `refilter` now calls
 `Col(0).SetWidthToFill()` after populating, which sizes to the real client
 width and adapts as the scrollbar appears and disappears.
 
-**12. Themes and custom draw are separate fights.** `SetWindowTheme` with
+**12. Rebuilding the list flickers unless painting is suppressed.** Every
+delete and insert repaints, and so does the scrollbar appearing or disappearing
+as the row count changes -- which is why the flash only showed once the list was
+long enough to need a scrollbar. `refilter` wraps the rebuild in
+`SetRedraw(false)`/`SetRedraw(true)`, and the list carries
+`LVS_EX_DOUBLEBUFFER` so the erase-then-paint happens off-screen. Note the
+invalidate in `setSelection` deliberately keeps `erase: true`; with double
+buffering it costs nothing, and `false` would leave stale rows behind when a
+filter shrinks the list.
+
+**13. Themes and custom draw are separate fights.** `SetWindowTheme` with
 `DarkMode_Explorer` is what makes scrollbars dark; it is unrelated to the
 selection problem above (removing it does not fix the highlight).
 
-**13. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
+**14. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
 logical coordinates but `CopyFromScreen` captures physical pixels, so the window
 appears at 1.5x its reported position and looks mispositioned when it is not.
 Call `SetProcessDPIAware()` in the capture script first.
 
-**14. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**15. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one
