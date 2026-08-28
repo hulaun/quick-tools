@@ -1,0 +1,16 @@
+# Build output
+bin/
+*.exe
+
+# Go
+*.test
+*.out
+
+# The generated resource object (icon + DPI manifest) is checked in on purpose
+# once it exists -- it is a build input, not an artifact. Do not ignore *.syso.
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
