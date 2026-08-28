@@ -95,11 +95,11 @@ func registerLines(r *Registry) {
 		r.Add(Transform{ID: id, Name: name, Group: "Lines", Tags: tags, Run: pure(f)})
 	}
 	add("lines.trim", "Trim each line", []string{"strip"}, TrimLines)
-	add("lines.dedupe", "Remove duplicate lines", []string{"uniq"}, DedupeLines)
+	add("lines.dedupe", "Remove duplicate lines", []string{"uniq", "dedupe"}, DedupeLines)
 	add("lines.sort", "Sort lines", nil, SortLines)
 	add("lines.reverse", "Reverse line order", nil, ReverseLines)
 	add("lines.noblank", "Remove blank lines", []string{"compact"}, RemoveBlankLines)
 	add("lines.joincomma", "Join lines with commas", []string{"csv"}, JoinComma)
 	add("lines.number", "Number lines", nil, NumberLines)
-	add("lines.sqlin", "Lines -> SQL IN (...) list", []string{"sql", "in"}, ToSQLInList)
+	add("lines.sqlin", "Lines to sql in list", []string{"sql", "in"}, ToSQLInList)
 }

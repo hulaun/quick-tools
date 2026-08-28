@@ -53,9 +53,9 @@ func TestSQLInList(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"1\n2\n3", "(1, 2, 3)"},
 		{"abc\ndef", "('abc', 'def')"},
-		{"O'Brien", "('O''Brien')"},  // embedded quote must be doubled
-		{"1\nabc", "(1, 'abc')"},     // mixed: numbers stay bare
-		{" 7 \n\n 8 ", "(7, 8)"},     // blanks dropped, values trimmed
+		{"O'Brien", "('O''Brien')"}, // embedded quote must be doubled
+		{"1\nabc", "(1, 'abc')"},    // mixed: numbers stay bare
+		{" 7 \n\n 8 ", "(7, 8)"},    // blanks dropped, values trimmed
 	}
 	for _, c := range cases {
 		if got := ToSQLInList(c.in); got != c.want {

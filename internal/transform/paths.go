@@ -58,13 +58,13 @@ func PathDir(s string) string {
 
 func registerPaths(r *Registry) {
 	add := func(id, name string, tags []string, f func(string) string) {
-		r.Add(Transform{ID: id, Name: name, Group: "Path", Tags: tags, Run: pure(f)})
+		r.Add(Transform{ID: id, Name: name, Group: "Paths", Tags: tags, Run: pure(f)})
 	}
-	add("path.forward", `Backslashes -> forward slashes`, []string{"unix", "posix", "/"}, ToForwardSlashes)
-	add("path.back", `Forward slashes -> backslashes`, []string{"windows", `\`}, ToBackSlashes)
-	add("path.escape", `Escape backslashes (\ -> \\)`, []string{"literal"}, EscapeBackslashes)
-	add("path.unescape", `Unescape backslashes (\\ -> \)`, nil, UnescapeBackslashes)
-	add("path.fileuri", "Path -> file:// URI", []string{"uri", "url"}, ToFileURI)
-	add("path.base", "Basename", []string{"filename"}, PathBase)
+	add("path.forward", "Backslashes to forward slashes", []string{"unix", "posix", "slash"}, ToForwardSlashes)
+	add("path.back", "Forward slashes to backslashes", []string{"windows"}, ToBackSlashes)
+	add("path.escape", "Escape backslashes", []string{"literal", "double"}, EscapeBackslashes)
+	add("path.unescape", "Unescape backslashes", nil, UnescapeBackslashes)
+	add("path.fileuri", "Path to file uri", []string{"uri", "url"}, ToFileURI)
+	add("path.base", "Base name", []string{"filename", "basename"}, PathBase)
 	add("path.dir", "Directory name", []string{"dirname", "folder"}, PathDir)
 }

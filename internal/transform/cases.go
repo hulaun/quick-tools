@@ -84,8 +84,8 @@ func ToPascal(s string) string {
 	return b.String()
 }
 
-func ToSnake(s string) string  { return strings.Join(lowerAll(splitWords(s)), "_") }
-func ToKebab(s string) string  { return strings.Join(lowerAll(splitWords(s)), "-") }
+func ToSnake(s string) string { return strings.Join(lowerAll(splitWords(s)), "_") }
+func ToKebab(s string) string { return strings.Join(lowerAll(splitWords(s)), "-") }
 func ToScreaming(s string) string {
 	return strings.ToUpper(ToSnake(s))
 }
@@ -105,15 +105,15 @@ func ToSpaced(s string) string { return strings.Join(lowerAll(splitWords(s)), " 
 
 func registerCases(r *Registry) {
 	add := func(id, name string, tags []string, f func(string) string) {
-		r.Add(Transform{ID: id, Name: name, Group: "Case", Tags: tags, Run: pure(f)})
+		r.Add(Transform{ID: id, Name: name, Group: "Cases", Tags: tags, Run: pure(f)})
 	}
-	add("case.camel", "camelCase", []string{"cc", "lowerCamel"}, ToCamel)
-	add("case.pascal", "PascalCase", []string{"pc", "upperCamel"}, ToPascal)
-	add("case.snake", "snake_case", []string{"sc", "underscore"}, ToSnake)
-	add("case.screaming", "SCREAMING_SNAKE_CASE", []string{"const", "screaming"}, ToScreaming)
-	add("case.kebab", "kebab-case", []string{"kc", "dash", "slug"}, ToKebab)
-	add("case.title", "Title Case", []string{"tc"}, ToTitle)
-	add("case.spaced", "spaced words", []string{"prose"}, ToSpaced)
-	add("case.upper", "UPPERCASE", []string{"upper"}, strings.ToUpper)
-	add("case.lower", "lowercase", []string{"lower"}, strings.ToLower)
+	add("case.camel", "Camel case", []string{"camelCase", "cc", "lowerCamel"}, ToCamel)
+	add("case.pascal", "Pascal case", []string{"PascalCase", "pc", "upperCamel"}, ToPascal)
+	add("case.snake", "Snake case", []string{"snake_case", "sc", "underscore"}, ToSnake)
+	add("case.screaming", "Screaming snake case", []string{"SCREAMING_SNAKE_CASE", "const"}, ToScreaming)
+	add("case.kebab", "Kebab case", []string{"kebab-case", "kc", "dash", "slug"}, ToKebab)
+	add("case.title", "Title case", []string{"tc"}, ToTitle)
+	add("case.spaced", "Spaced words", []string{"prose"}, ToSpaced)
+	add("case.upper", "Upper case", []string{"UPPERCASE", "upper"}, strings.ToUpper)
+	add("case.lower", "Lower case", []string{"lowercase", "lower"}, strings.ToLower)
 }

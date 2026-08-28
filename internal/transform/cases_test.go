@@ -37,19 +37,19 @@ func TestCaseConversions(t *testing.T) {
 		camel, pascal, snake, screaming, kebab, titled, spaced string
 	}{
 		{
-			in: "userName",
+			in:    "userName",
 			camel: "userName", pascal: "UserName", snake: "user_name",
 			screaming: "USER_NAME", kebab: "user-name", titled: "User Name",
 			spaced: "user name",
 		},
 		{
-			in: "HTTP_SERVER_PORT",
+			in:    "HTTP_SERVER_PORT",
 			camel: "httpServerPort", pascal: "HttpServerPort", snake: "http_server_port",
 			screaming: "HTTP_SERVER_PORT", kebab: "http-server-port",
 			titled: "Http Server Port", spaced: "http server port",
 		},
 		{
-			in: "parseJSONData",
+			in:    "parseJSONData",
 			camel: "parseJsonData", pascal: "ParseJsonData", snake: "parse_json_data",
 			screaming: "PARSE_JSON_DATA", kebab: "parse-json-data",
 			titled: "Parse Json Data", spaced: "parse json data",

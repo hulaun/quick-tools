@@ -81,9 +81,9 @@ func registerMisc(r *Registry) {
 	addE := func(id, name string, tags []string, f func(string) (string, error)) {
 		r.Add(Transform{ID: id, Name: name, Group: "Misc", Tags: tags, Run: f})
 	}
-	addE("misc.uuid", "Generate UUID v4", []string{"guid", "uuid"}, NewUUID)
-	addP("misc.stripansi", "Strip ANSI colour codes", []string{"terminal"}, StripANSI)
+	addE("misc.uuid", "Generate uuid", []string{"guid", "uuid"}, NewUUID)
+	addP("misc.stripansi", "Strip ansi colour codes", []string{"terminal"}, StripANSI)
 	addP("misc.collapsews", "Collapse whitespace", []string{"squeeze"}, CollapseWhitespace)
-	addE("misc.ts2date", "Timestamp -> date", []string{"epoch", "unix", "time"}, TimestampToDate)
-	addE("misc.date2ts", "Date -> timestamp", []string{"epoch", "unix"}, DateToTimestamp)
+	addE("misc.ts2date", "Timestamp to date", []string{"epoch", "unix", "time"}, TimestampToDate)
+	addE("misc.date2ts", "Date to timestamp", []string{"epoch", "unix"}, DateToTimestamp)
 }

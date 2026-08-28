@@ -73,11 +73,11 @@ func JSONSortKeys(s string) (string, error) {
 
 func registerJSON(r *Registry) {
 	add := func(id, name string, tags []string, f func(string) (string, error)) {
-		r.Add(Transform{ID: id, Name: name, Group: "JSON", Tags: tags, Run: f})
+		r.Add(Transform{ID: id, Name: name, Group: "Json", Tags: tags, Run: f})
 	}
-	add("json.pretty", "Pretty-print JSON", []string{"format", "indent", "beautify"}, JSONPretty)
-	add("json.minify", "Minify JSON", []string{"compact"}, JSONMinify)
-	add("json.escape", "Escape as JSON string", []string{"quote"}, JSONEscape)
-	add("json.unescape", "Unescape JSON string", []string{"unquote"}, JSONUnescape)
-	add("json.sortkeys", "Pretty-print JSON, keys sorted", []string{"sort", "diff"}, JSONSortKeys)
+	add("json.pretty", "Pretty print", []string{"format", "indent", "beautify"}, JSONPretty)
+	add("json.minify", "Minify", []string{"compact"}, JSONMinify)
+	add("json.escape", "Escape as json string", []string{"quote"}, JSONEscape)
+	add("json.unescape", "Unescape json string", []string{"unquote"}, JSONUnescape)
+	add("json.sortkeys", "Pretty print with sorted keys", []string{"sort", "diff"}, JSONSortKeys)
 }

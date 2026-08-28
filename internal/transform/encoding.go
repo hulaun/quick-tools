@@ -93,13 +93,13 @@ func registerEncoding(r *Registry) {
 	addE := func(id, name string, tags []string, f func(string) (string, error)) {
 		r.Add(Transform{ID: id, Name: name, Group: "Encoding", Tags: tags, Run: f})
 	}
-	addP("enc.urlencode", "URL encode", []string{"percent", "escape"}, URLEncode)
-	addE("enc.urldecode", "URL decode", []string{"unescape"}, URLDecode)
+	addP("enc.urlencode", "Url encode", []string{"percent", "escape"}, URLEncode)
+	addE("enc.urldecode", "Url decode", []string{"unescape"}, URLDecode)
 	addP("enc.b64encode", "Base64 encode", []string{"b64"}, Base64Encode)
 	addE("enc.b64decode", "Base64 decode", []string{"b64", "unbase64"}, Base64Decode)
-	addP("enc.htmlencode", "HTML entity encode", []string{"entities"}, HTMLEncode)
-	addP("enc.htmldecode", "HTML entity decode", nil, HTMLDecode)
+	addP("enc.htmlencode", "Html entity encode", []string{"entities"}, HTMLEncode)
+	addP("enc.htmldecode", "Html entity decode", nil, HTMLDecode)
 	addP("enc.hexencode", "Hex encode", nil, HexEncode)
 	addE("enc.hexdecode", "Hex decode", []string{"unhex"}, HexDecode)
-	addE("enc.jwt", "Decode JWT", []string{"token", "jwt"}, JWTDecode)
+	addE("enc.jwt", "Decode jwt", []string{"token", "jwt"}, JWTDecode)
 }
