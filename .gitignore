@@ -1,4 +1,5 @@
-# Build output
+# Build output. The dev build lives at the repo root so that scripts/ and
+# snippets/ sit beside it, which is exactly the layout a release ships in.
 bin/
 *.exe
 

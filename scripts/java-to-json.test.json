@@ -1,0 +1,77 @@
+[
+  {
+    "name": "lombok style",
+    "in": "Person(name=John, age=30)",
+    "out": "{\n  \"name\": \"John\",\n  \"age\": 30\n}"
+  },
+  {
+    "name": "ide style",
+    "in": "Person{name='John', age=30}",
+    "out": "{\n  \"name\": \"John\",\n  \"age\": 30\n}"
+  },
+  {
+    "name": "empty object",
+    "in": "Person()",
+    "out": "{}"
+  },
+  {
+    "name": "null and booleans",
+    "in": "P(note=null, ok=true, no=false)",
+    "out": "{\n  \"note\": null,\n  \"ok\": true,\n  \"no\": false\n}"
+  },
+  {
+    "name": "numbers",
+    "in": "P(x=-1.5, y=0)",
+    "out": "{\n  \"x\": -1.5,\n  \"y\": 0\n}"
+  },
+  {
+    "name": "not quite a number stays a string",
+    "in": "P(v=12abc)",
+    "out": "{\n  \"v\": \"12abc\"\n}"
+  },
+  {
+    "name": "nested object",
+    "in": "Outer(inner=Inner(x=1))",
+    "out": "{\n  \"inner\": {\n    \"x\": 1\n  }\n}"
+  },
+  {
+    "name": "deeply nested",
+    "in": "A(b=B(c=C(d=1)))",
+    "out": "{\n  \"b\": {\n    \"c\": {\n      \"d\": 1\n    }\n  }\n}"
+  },
+  {
+    "name": "list of scalars",
+    "in": "P(tags=[a, b])",
+    "out": "{\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ]\n}"
+  },
+  {
+    "name": "empty list",
+    "in": "P(tags=[])",
+    "out": "{\n  \"tags\": []\n}"
+  },
+  {
+    "name": "list of objects",
+    "in": "Outer(list=[A(y=2), A(y=3)])",
+    "out": "{\n  \"list\": [\n    {\n      \"y\": 2\n    },\n    {\n      \"y\": 3\n    }\n  ]\n}"
+  },
+  {
+    "name": "map value",
+    "in": "P(m={a=1, b=2})",
+    "out": "{\n  \"m\": {\n    \"a\": 1,\n    \"b\": 2\n  }\n}"
+  },
+  {
+    "name": "quoted value containing a comma and an equals",
+    "in": "P(a='x, y=z', b=1)",
+    "out": "{\n  \"a\": \"x, y=z\",\n  \"b\": 1\n}"
+  },
+  {
+    "name": "bare value containing a comma",
+    "in": "P(note=hello, world, age=null)",
+    "out": "{\n  \"note\": \"hello, world\",\n  \"age\": null\n}"
+  },
+  {
+    "name": "rejects text that is not an object",
+    "in": "just some text",
+    "error": true
+  }
+]

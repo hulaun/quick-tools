@@ -34,10 +34,15 @@ The user is building this partly to learn. Two pieces are **reserved for them**:
 - `scripts/java-to-json.js` — Java `toString()` output → JSON
 - `scripts/js-object-to-json.js` — JavaScript object literal → JSON
 
-**Do not implement these.** Build everything *around* them so they are ready to
-write against: a wired-up stub, the grammar spec, failing test fixtures, and a
-red/green runner. If asked to "finish the project", finish everything except
-these two and say so.
+**Do not implement these.** The scaffolding is finished as of M2:
+- stubs with the contract wired up and hints, but no parser
+- `scripts/README.md` — the grammar, type rules, and the ambiguity policy
+- `scripts/*.test.json` — 15 and 13 cases, currently red
+- `scripts/csv-line-to-json.js` — a complete worked parser to copy the shape of
+- `quicktools.exe -test-scripts` — the red/green loop
+
+If asked to "finish the project", finish everything except these two and say so.
+Do not "helpfully" fill in a stub.
 
 The same instinct generalises: when a task has a genuinely interesting
 algorithmic core (parser, scheduler, diff, solver), ask before implementing it.
@@ -51,7 +56,7 @@ Build all the mechanical parts fully — those were never the point.
 |---|---|
 | **M0** — de-risk spike | Done and confirmed working by the user in a real app. |
 | **M1** — palette UI + built-in transforms | Done. Dark themed palette, fuzzy search, live preview. |
-| **M2** — goja scripting + handoff | Not started. |
+| **M2** — goja scripting + handoff | Done. Engine, hot-reload, fixture runner, stubs and spec all in place. |
 | **M3** — snippets | Not started. |
 | **M4** — packaging | Not started. |
 
@@ -68,6 +73,10 @@ Build all the mechanical parts fully — those were never the point.
 - `cmd/quicktools` — the real app.
 - Tray icon with a context menu: open, toggle auto-paste (persisted), quit.
   The icon is generated as a 32x32 ICO and `go:embed`ed in `internal/ui`.
+- `internal/script` — goja engine with a 2s interrupt, hot-reloading loader,
+  and the `.test.json` fixture runner behind `quicktools.exe -test-scripts`.
+- Transforms run on a worker goroutine and post results back via `wmRunDone`;
+  stale preview results are discarded. A slow script cannot freeze the window.
 
 ### Known open questions
 
@@ -96,8 +105,12 @@ export PATH="$PATH:/c/Program Files/Go/bin"
 
 go test ./...                      # all tests
 go vet ./...                       # see "known vet finding" below
-go build -o bin/quicktools.exe ./cmd/quicktools   # the app
-./bin/quicktools.exe                             # then press Ctrl+Alt+Space
+# The exe is built at the repo root on purpose, so scripts/ and snippets/ sit
+# beside it -- the same layout a release ships in. Building into bin/ makes the
+# app read a different copy of scripts/ than the one being edited.
+go build -o quicktools.exe ./cmd/quicktools
+./quicktools.exe                   # then press Ctrl+Alt+Space
+./quicktools.exe -test-scripts     # run the script fixtures
 
 go build -o bin/m0.exe ./cmd/m0    # the spike
 ./bin/m0.exe -selftest             # unattended clipboard check
@@ -249,7 +262,17 @@ Call `SetProcessDPIAware()` in the capture script first.
 the value 100 -- unlike an `iota` block, a plain expression is repeated
 verbatim. It compiled and only failed on the duplicate-case check.
 
-**16. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**16. goja does not parse ES module syntax.** Scripts use plain globals
+(`var name`, `var tags`) and a `function transform(input)`, not `export
+default`. An earlier version of this file documented the `export` form; it does
+not work.
+
+**17. `-test-scripts` prints to stdout, so it needs a console.** Once M4 builds
+with `-H windowsgui` there is no console attached and the output goes nowhere.
+That flag will need `AttachConsole(ATTACH_PARENT_PROCESS)` first, or the runner
+moves to its own small command.
+
+**18. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one

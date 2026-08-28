@@ -1,0 +1,67 @@
+[
+  {
+    "name": "unquoted keys",
+    "in": "{a: 1, b: 2}",
+    "out": "{\n  \"a\": 1,\n  \"b\": 2\n}"
+  },
+  {
+    "name": "single quotes",
+    "in": "{a: 'x'}",
+    "out": "{\n  \"a\": \"x\"\n}"
+  },
+  {
+    "name": "trailing comma",
+    "in": "{a: 1,}",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "already json",
+    "in": "{\"a\": 1}",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "nested",
+    "in": "{a: {b: [1, 2]}}",
+    "out": "{\n  \"a\": {\n    \"b\": [\n      1,\n      2\n    ]\n  }\n}"
+  },
+  {
+    "name": "array at top level",
+    "in": "[1, 'two', true]",
+    "out": "[\n  1,\n  \"two\",\n  true\n]"
+  },
+  {
+    "name": "block comment",
+    "in": "{ /* note */ a: 1 }",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "line comment",
+    "in": "{ a: 1 // note\n}",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "null and booleans",
+    "in": "{a: null, b: true}",
+    "out": "{\n  \"a\": null,\n  \"b\": true\n}"
+  },
+  {
+    "name": "numbers",
+    "in": "{a: -1.5, b: 1e3}",
+    "out": "{\n  \"a\": -1.5,\n  \"b\": 1000\n}"
+  },
+  {
+    "name": "escaped quote in a string",
+    "in": "{a: 'it's'}",
+    "out": "{\n  \"a\": \"it's\"\n}"
+  },
+  {
+    "name": "rejects a malformed literal",
+    "in": "{a:}",
+    "error": true
+  },
+  {
+    "name": "rejects executable content -- a parser must not run the input",
+    "in": "{a: (function(){ return 1 })()}",
+    "error": true
+  }
+]

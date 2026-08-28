@@ -47,11 +47,17 @@ type Palette struct {
 	list    *ui.ListView
 	preview *ui.Edit
 
-	cfg   config.Config
-	reg   *transform.Registry
-	index *fuzzy.Index
-	theme *theme
-	tray  *tray
+	cfg    config.Config
+	reg    *transform.Registry
+	index  *fuzzy.Index
+	theme  *theme
+	tray   *tray
+	loader scriptLoader
+	runner *runner
+
+	// scriptIDs are the transform ids currently contributed by scripts, so the
+	// previous generation can be removed on reload.
+	scriptIDs []string
 
 	// visible mirrors the rows currently in the list view, so a row index can be
 	// mapped back to the item it represents.
@@ -80,7 +86,7 @@ type Palette struct {
 
 // New builds the palette window and its controls. Nothing is displayed yet --
 // the window is created hidden and stays that way until the hotkey fires.
-func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
+func New(cfg config.Config, reg *transform.Registry, loader scriptLoader) (*Palette, error) {
 	th, err := newTheme()
 	if err != nil {
 		return nil, err
@@ -161,8 +167,10 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 		reg:     reg,
 		theme:   th,
 		tray:    tr,
+		loader:  loader,
+		runner:  newRunner(),
 	}
-	p.rebuildIndex()
+	p.reloadScripts()
 	p.events()
 	return p, nil
 }
@@ -195,6 +203,8 @@ func (p *Palette) events() {
 		if err := winapi.RegisterHotkeyFor(uintptr(p.wnd.Hwnd()), hotkeyID, mods, vk); err != nil {
 			p.fatal(fmt.Sprintf("Could not register %s", p.cfg.Hotkey), err)
 		}
+
+		p.watchScripts(p.wnd.Hwnd())
 
 		if err := p.tray.add(p.wnd.Hwnd(), "quick-tools -- "+p.cfg.Hotkey); err != nil {
 			// Without the icon there is no way to quit short of Task Manager, so
@@ -230,6 +240,7 @@ func (p *Palette) events() {
 	})
 
 	p.trayEvents()
+	p.runEvents()
 
 	p.search.On().EnChange(func() { p.refilter() })
 
@@ -462,11 +473,10 @@ func (p *Palette) setSelection(i int) {
 // updatePreview runs the highlighted transform against the captured clipboard
 // text and shows the result.
 //
-// M1 runs this synchronously, which is safe because every built-in transform is
-// pure string manipulation measured in microseconds. This function is the single
-// chokepoint where that must change: when goja scripts arrive in M2, the call to
-// Run must move to a worker goroutine that posts its result back, or a slow
-// script will freeze the window.
+// The run happens on a worker goroutine and the answer arrives back as a
+// wmRunDone message. A user script is arbitrary JavaScript -- running it inline
+// would freeze the window for as long as it takes, up to the two-second
+// timeout for one with an accidental infinite loop.
 func (p *Palette) updatePreview() {
 	it, ok := p.selected()
 	if !ok {
@@ -478,16 +488,14 @@ func (p *Palette) updatePreview() {
 		p.preview.SetText("")
 		return
 	}
-	out, err := t.Run(p.input)
-	if err != nil {
-		p.preview.SetText(toCRLF("error: " + err.Error()))
-		return
-	}
-	p.preview.SetText(toCRLF(out))
+	p.runner.start(p.wnd.Hwnd(), t, p.input, false)
 }
 
 // apply runs the highlighted transform for real: result to the clipboard,
 // palette away, focus back, and optionally a synthesised paste.
+//
+// Like the preview it runs on a worker; finishApply does the rest once the
+// result comes back.
 func (p *Palette) apply() {
 	it, ok := p.selected()
 	if !ok {
@@ -497,16 +505,19 @@ func (p *Palette) apply() {
 	if !ok {
 		return
 	}
+	p.runner.start(p.wnd.Hwnd(), t, p.input, true)
+}
 
-	out, err := t.Run(p.input)
-	if err != nil {
+// finishApply handles a completed apply run, back on the UI thread.
+func (p *Palette) finishApply(res runResult) {
+	if res.err != nil {
 		// Stay open on failure. Closing would hide the reason and leave the user
 		// wondering why nothing happened.
-		p.preview.SetText(toCRLF("error: " + err.Error()))
+		p.preview.SetText(toCRLF("error: " + res.err.Error()))
 		return
 	}
 
-	if err := winapi.SetClipboardText(out); err != nil {
+	if err := winapi.SetClipboardText(res.out); err != nil {
 		p.preview.SetText(toCRLF("could not write to clipboard: " + err.Error()))
 		return
 	}
