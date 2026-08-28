@@ -49,7 +49,7 @@ Build all the mechanical parts fully — those were never the point.
 
 | Milestone | State |
 |---|---|
-| **M0** — de-risk spike | Built. Clipboard round trip verified automatically. **Interactive hotkey test still pending user confirmation.** |
+| **M0** — de-risk spike | Done and confirmed working by the user in a real app. |
 | **M1** — palette UI + built-in transforms | Done. Dark themed palette, fuzzy search, live preview. |
 | **M2** — goja scripting + handoff | Not started. |
 | **M3** — snippets | Not started. |
@@ -89,9 +89,11 @@ export PATH="$PATH:/c/Program Files/Go/bin"
 
 go test ./...                      # all tests
 go vet ./...                       # see "known vet finding" below
+go build -o bin/quicktools.exe ./cmd/quicktools   # the app
+./bin/quicktools.exe                             # then press Ctrl+Alt+Space
+
 go build -o bin/m0.exe ./cmd/m0    # the spike
 ./bin/m0.exe -selftest             # unattended clipboard check
-./bin/m0.exe                       # interactive: Ctrl+Alt+Space
 ```
 
 Final builds use `-ldflags "-H windowsgui -s -w"` so there is no console window.
@@ -101,25 +103,26 @@ Final builds use `-ldflags "-H windowsgui -s -w"` so there is no console window.
 ## Layout
 
 ```
-cmd/m0/            de-risk spike (no UI) — keep working as a diagnostic tool
-cmd/quicktools/    the real app (not yet written)
-internal/winapi/   Win32: hotkey, clipboard, focus, sendinput
+cmd/m0/             de-risk spike (no UI) — keep working as a diagnostic tool
+cmd/quicktools/     the real app
+internal/winapi/    Win32: hotkey, clipboard, focus, sendinput, DPI, theming
 internal/transform/ built-in transforms + registry
-internal/ui/       palette window, tray          (empty)
-internal/script/   goja engine + hot-reload      (empty)
-internal/snippet/  snippet tree                  (empty)
-internal/config/   %APPDATA%\quick-tools\config.json  (empty)
-scripts/           user .js transforms
-snippets/          user snippet tree
+internal/ui/        palette.go (window) + theme.go (colours, fonts, chrome)
+internal/fuzzy/     ranked search over the palette entries
+internal/config/    %APPDATA%\quick-tools\config.json
+internal/script/    goja engine + hot-reload      (empty, M2)
+internal/snippet/   snippet tree                  (empty, M3)
+scripts/            user .js transforms
+snippets/           user snippet tree
 ```
 
-### Planned dependencies (none added yet)
+### Dependencies
 
-| Need | Package |
-|---|---|
-| Win32 window and controls | `github.com/rodrigocfd/windigo` |
-| JS engine for user scripts | `github.com/dop251/goja` |
-| Fuzzy matching | `github.com/sahilm/fuzzy` |
+| Need | Package | State |
+|---|---|---|
+| Win32 window and controls | `github.com/rodrigocfd/windigo` | in use |
+| Fuzzy matching | `github.com/sahilm/fuzzy` | in use |
+| JS engine for user scripts | `github.com/dop251/goja` | not added yet (M2) |
 
 `lxn/walk` — the obvious Windows GUI choice — **was archived in April 2026**.
 Do not adopt it. `windigo` is the pure-Go, cgo-free replacement.
@@ -131,6 +134,10 @@ Deliberately avoided: `golang.design/x/hotkey` (we own a message loop already),
 
 ## Conventions
 
+- **Layout and colour live in one place each**: the constants block at the top
+  of `internal/ui/palette.go`, and the colour vars at the top of
+  `internal/ui/theme.go`. Nothing else hardcodes a position or a colour. The
+  user edits these directly — keep it that way.
 - **The `Transform` struct is the single abstraction.** Built-ins and JS scripts
   both become a `Transform`, so the palette, fuzzy index and preview pane never
   know which is which. Keep it that way — it is what makes a dropped-in script a
