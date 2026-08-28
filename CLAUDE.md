@@ -66,11 +66,18 @@ Build all the mechanical parts fully — those were never the point.
 - `internal/ui` — the palette: dark theme, Segoe UI, DWM rounded corners,
   accent highlight, live preview. `internal/fuzzy` ranks entries.
 - `cmd/quicktools` — the real app.
+- Tray icon with a context menu: open, toggle auto-paste (persisted), quit.
+  The icon is generated as a 32x32 ICO and `go:embed`ed in `internal/ui`.
 
 ### Known open questions
 
-- No tray icon and no quit path yet: stop it with
-  `taskkill /IM quicktools.exe /F`. This is the next piece of work.
+- Windows 11 hides newly registered tray icons in the overflow ("^") by
+  default. The icon is there and works; the user drags it out to pin it. Not a
+  bug and nothing to fix in code.
+- A flash still remains at the exact moment the list scrollbar appears or
+  disappears. Much reduced by WS_EX_COMPOSITED but not gone. The user has
+  accepted it for now. The remaining option, if it ever matters, is to keep the
+  scrollbar permanently visible so the transition never happens.
 - The search box cue banner (placeholder text) is set but does not appear.
   Cosmetic, unexplained, not yet chased.
 - Elevated target windows will reject synthesised input (Windows UIPI). This is
@@ -237,7 +244,12 @@ logical coordinates but `CopyFromScreen` captures physical pixels, so the window
 appears at 1.5x its reported position and looks mispositioned when it is not.
 Call `SetProcessDPIAware()` in the capture script first.
 
-**15. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**15. A Go const block does not repeat the last expression.** Writing
+`cmdOpen uint16 = 100` then bare `cmdAutoPaste` and `cmdQuit` gives all three
+the value 100 -- unlike an `iota` block, a plain expression is repeated
+verbatim. It compiled and only failed on the duplicate-case check.
+
+**16. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one

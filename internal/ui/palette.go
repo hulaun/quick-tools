@@ -51,6 +51,7 @@ type Palette struct {
 	reg   *transform.Registry
 	index *fuzzy.Index
 	theme *theme
+	tray  *tray
 
 	// visible mirrors the rows currently in the list view, so a row index can be
 	// mapped back to the item it represents.
@@ -146,6 +147,11 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			WndExStyle(co.WS_EX_LEFT),
 	)
 
+	tr, err := newTray()
+	if err != nil {
+		return nil, err
+	}
+
 	p := &Palette{
 		wnd:     wnd,
 		search:  search,
@@ -154,6 +160,7 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 		cfg:     cfg,
 		reg:     reg,
 		theme:   th,
+		tray:    tr,
 	}
 	p.rebuildIndex()
 	p.events()
@@ -189,6 +196,11 @@ func (p *Palette) events() {
 			p.fatal(fmt.Sprintf("Could not register %s", p.cfg.Hotkey), err)
 		}
 
+		if err := p.tray.add(p.wnd.Hwnd(), "quick-tools -- "+p.cfg.Hotkey); err != nil {
+			// Without the icon there is no way to quit short of Task Manager, so
+			// this is worth telling the user about rather than starting anyway.
+			p.fatal("Could not create the tray icon", err)
+		}
 		return 0
 	})
 
@@ -213,8 +225,11 @@ func (p *Palette) events() {
 
 	p.wnd.On().WmDestroy(func() {
 		winapi.UnregisterHotkeyFor(uintptr(p.wnd.Hwnd()), hotkeyID)
+		p.tray.remove(p.wnd.Hwnd())
 		p.theme.destroy()
 	})
+
+	p.trayEvents()
 
 	p.search.On().EnChange(func() { p.refilter() })
 
