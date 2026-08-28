@@ -50,7 +50,7 @@ Build all the mechanical parts fully — those were never the point.
 | Milestone | State |
 |---|---|
 | **M0** — de-risk spike | Built. Clipboard round trip verified automatically. **Interactive hotkey test still pending user confirmation.** |
-| **M1** — palette UI + built-in transforms | Transforms done (40, tested). UI not started. |
+| **M1** — palette UI + built-in transforms | Done. Dark themed palette, fuzzy search, live preview. |
 | **M2** — goja scripting + handoff | Not started. |
 | **M3** — snippets | Not started. |
 | **M4** — packaging | Not started. |
@@ -63,12 +63,16 @@ Build all the mechanical parts fully — those were never the point.
   Misc. `go test ./...` is green.
 - `cmd/m0` — the de-risk spike. `-selftest` checks the clipboard round trip
   unattended (and restores whatever the user had on the clipboard).
+- `internal/ui` — the palette: dark theme, Segoe UI, DWM rounded corners,
+  accent highlight, live preview. `internal/fuzzy` ranks entries.
+- `cmd/quicktools` — the real app.
 
 ### Known open questions
 
-- The interactive M0 gate (hotkey in Notepad / VS Code / browser / RDP) has not
-  been confirmed by the user yet. **Do not start M1 until it has.**
-- `Ctrl+Alt+Space` may collide with an existing app; not yet confirmed free.
+- No tray icon and no quit path yet: stop it with
+  `taskkill /IM quicktools.exe /F`. This is the next piece of work.
+- The search box cue banner (placeholder text) is set but does not appear.
+  Cosmetic, unexplained, not yet chased.
 - Elevated target windows will reject synthesised input (Windows UIPI). This is
   an OS rule, not a bug — do not try to defeat it.
 - Nothing has been pushed to the remote yet. The local repo has commits; ask
@@ -165,7 +169,22 @@ Ctrl+Alt from the hotkey; adding Ctrl+V on top makes the target see Ctrl+Alt+V.
 **5. `OpenClipboard` fails when another process holds it.** Routine, not
 exceptional. `winapi.openClipboard` retries ten times with a 10ms backoff.
 
-**6. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**6. A list view ignores custom-draw colours on a selected row.** It always
+paints the selected row in system colours -- flat grey with black text on a dark
+window. The palette therefore never lets the control select anything: `selIdx`
+tracks the highlight and `NmCustomDraw` paints it. Do not reintroduce
+`.Select(true)` or `LVS_SHOWSELALWAYS`; it will silently undo the accent colour.
+
+**7. Themes and custom draw are separate fights.** `SetWindowTheme` with
+`DarkMode_Explorer` is what makes scrollbars dark; it is unrelated to the
+selection problem above (removing it does not fix the highlight).
+
+**8. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
+logical coordinates but `CopyFromScreen` captures physical pixels, so the window
+appears at 1.5x its reported position and looks mispositioned when it is not.
+Call `SetProcessDPIAware()` in the capture script first.
+
+**9. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one
@@ -175,11 +194,8 @@ function. Do not scatter new ones.
 
 ## Next steps
 
-1. **Get the M0 interactive gate confirmed** by the user before anything else.
-2. M1: the palette window in windigo — edit box, owner-drawn list, live preview
-   pane. Transforms must run on a worker goroutine and post results back, never
-   on the UI thread.
-3. M2: goja engine with a per-run interrupt budget (~2s), `scripts/` hot-reload,
+1. Tray icon and a quit path — the app currently can only be killed.
+2. M2: goja engine with a per-run interrupt budget (~2s), `scripts/` hot-reload,
    a `--test-scripts` fixture runner, then hand the two parsers to the user with
    stubs, spec, and failing fixtures.
 

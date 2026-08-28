@@ -15,12 +15,17 @@ import (
 	"github.com/hulaun/quick-tools/internal/config"
 	"github.com/hulaun/quick-tools/internal/transform"
 	"github.com/hulaun/quick-tools/internal/ui"
+	"github.com/hulaun/quick-tools/internal/winapi"
 )
 
 func main() {
 	// Windows GUI is single-threaded, and RegisterHotKey delivers WM_HOTKEY to
 	// the registering thread. Both need this.
 	runtime.LockOSThread()
+
+	// Before any window is created: ask for real pixels, so Windows does not
+	// render at 96 DPI and scale the result up into a blur.
+	winapi.SetDPIAware()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -32,6 +37,10 @@ func main() {
 	reg := transform.NewRegistry()
 	transform.RegisterBuiltins(reg)
 
-	palette := ui.New(cfg, reg)
+	palette, err := ui.New(cfg, reg)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not build the palette window:", err)
+		os.Exit(1)
+	}
 	os.Exit(palette.Run())
 }

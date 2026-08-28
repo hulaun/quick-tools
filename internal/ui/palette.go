@@ -9,6 +9,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"unsafe"
 
@@ -47,6 +48,7 @@ type Palette struct {
 	cfg   config.Config
 	reg   *transform.Registry
 	index *fuzzy.Index
+	theme *theme
 
 	// visible mirrors the rows currently in the list view, so a row index can be
 	// mapped back to the item it represents.
@@ -61,6 +63,10 @@ type Palette struct {
 	// result is pasted back.
 	target uintptr
 
+	// selIdx is the highlighted row. Custom draw runs once per row per repaint,
+	// so it reads this rather than querying the control each time.
+	selIdx int
+
 	// shown guards against re-entering hide() while hiding, which the
 	// WM_ACTIVATE handler would otherwise cause.
 	shown bool
@@ -68,15 +74,21 @@ type Palette struct {
 
 // New builds the palette window and its controls. Nothing is displayed yet --
 // the window is created hidden and stays that way until the hotkey fires.
-func New(cfg config.Config, reg *transform.Registry) *Palette {
+func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
+	th, err := newTheme()
+	if err != nil {
+		return nil, err
+	}
+
 	wnd := ui.NewMain(
 		ui.OptsMain().
 			Title("quick-tools").
 			Size(ui.Dpi(winW, winH)).
-			Style(co.WS_POPUP | co.WS_BORDER | co.WS_CLIPCHILDREN).
+			Style(co.WS_POPUP | co.WS_CLIPCHILDREN).
 			// TOOLWINDOW keeps it out of the taskbar and Alt+Tab; TOPMOST keeps it
 			// above the window we are about to paste into.
 			ExStyle(co.WS_EX_TOOLWINDOW | co.WS_EX_TOPMOST).
+			ClassBrush(th.bg).
 			CmdShow(co.SW_HIDE),
 	)
 
@@ -94,7 +106,7 @@ func New(cfg config.Config, reg *transform.Registry) *Palette {
 		ui.OptsListView().
 			Position(ui.Dpi(pad, listTop)).
 			Size(ui.Dpi(listW, listH)).
-			CtrlStyle(co.LVS_REPORT|co.LVS_SINGLESEL|co.LVS_NOCOLUMNHEADER|co.LVS_SHOWSELALWAYS).
+			CtrlStyle(co.LVS_REPORT|co.LVS_SINGLESEL|co.LVS_NOCOLUMNHEADER).
 			CtrlExStyle(co.LVS_EX_FULLROWSELECT).
 			// One column holding "Group: Name". A separate group column was harder
 			// to read than simply writing the label out as a phrase.
@@ -107,7 +119,7 @@ func New(cfg config.Config, reg *transform.Registry) *Palette {
 			Width(ui.DpiX(winW-listW-rowGap-pad*2)).
 			Height(ui.DpiY(listH)).
 			CtrlStyle(co.ES_MULTILINE|co.ES_READONLY|co.ES_AUTOVSCROLL).
-			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_BORDER|co.WS_VSCROLL|co.WS_TABSTOP),
+			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_VSCROLL|co.WS_TABSTOP),
 	)
 
 	p := &Palette{
@@ -117,10 +129,11 @@ func New(cfg config.Config, reg *transform.Registry) *Palette {
 		preview: preview,
 		cfg:     cfg,
 		reg:     reg,
+		theme:   th,
 	}
 	p.rebuildIndex()
 	p.events()
-	return p
+	return p, nil
 }
 
 // Run shows nothing and blocks, pumping messages until the app exits.
@@ -151,8 +164,27 @@ func (p *Palette) events() {
 		if err := winapi.RegisterHotkeyFor(uintptr(p.wnd.Hwnd()), hotkeyID, mods, vk); err != nil {
 			p.fatal(fmt.Sprintf("Could not register %s", p.cfg.Hotkey), err)
 		}
+
+		for _, err := range applyChrome(p.wnd.Hwnd()) {
+			// Not fatal: these are Windows 11 features, and on 10 they simply are
+			// not there. Reported so a missing rounded corner is explained rather
+			// than mysterious.
+			fmt.Fprintln(os.Stderr, "window chrome:", err)
+		}
+		for _, h := range []win.HWND{p.search.Hwnd(), p.list.Hwnd(), p.preview.Hwnd()} {
+			p.theme.applyFont(h)
+			darkenScrollbars(h)
+		}
+		darkenListView(p.list.Hwnd())
+		setCueBanner(p.search.Hwnd(), "Search transforms")
 		return 0
 	})
+
+	// Edit controls ask their parent what colour to be. Without this they stay
+	// white, which on a dark window is the single most obvious thing wrong.
+	colorEdit := func(m ui.Wm) uintptr { return p.theme.paintControlBackground(m) }
+	p.wnd.On().Wm(co.WM_CTLCOLOREDIT, colorEdit)
+	p.wnd.On().Wm(co.WM_CTLCOLORSTATIC, colorEdit)
 
 	p.wnd.On().Wm(co.WM_HOTKEY, func(_ ui.Wm) uintptr {
 		p.show()
@@ -169,6 +201,7 @@ func (p *Palette) events() {
 
 	p.wnd.On().WmDestroy(func() {
 		winapi.UnregisterHotkeyFor(uintptr(p.wnd.Hwnd()), hotkeyID)
+		p.theme.destroy()
 	})
 
 	p.search.On().EnChange(func() { p.refilter() })
@@ -194,11 +227,40 @@ func (p *Palette) events() {
 		return p.search.Hwnd().DefSubclassProc(co.WM_KEYDOWN, m.WParam, m.LParam)
 	})
 
-	// Keep the preview in step with whatever row is highlighted.
-	p.list.On().LvnItemChanged(func(nm *win.NMLISTVIEW) {
-		if nm.UNewState&co.LVIS_SELECTED != 0 {
-			p.updatePreview()
+	// Clicking a row moves the highlight to it.
+	p.list.On().NmClick(func(nm *win.NMITEMACTIVATE) {
+		if nm.IItem >= 0 {
+			p.setSelection(int(nm.IItem))
 		}
+	})
+
+	// Double-clicking runs it, the same as Enter.
+	p.list.On().NmDblClk(func(nm *win.NMITEMACTIVATE) {
+		if nm.IItem >= 0 {
+			p.setSelection(int(nm.IItem))
+			p.apply()
+		}
+	})
+
+	// Paint the rows ourselves.
+	//
+	// A list view refuses to honour custom-draw colours for a row it considers
+	// selected -- it always paints that row with system colours, which on a dark
+	// window is flat grey with black text. So the control is never allowed to
+	// select anything: the highlight is ours, tracked in selIdx and drawn here.
+	p.list.On().NmCustomDraw(func(nm *win.NMLVCUSTOMDRAW) co.CDRF {
+		switch nm.Nmcd.DwDrawStage {
+		case co.CDDS_PREPAINT:
+			return co.CDRF_NOTIFYITEMDRAW
+		case co.CDDS_ITEMPREPAINT:
+			if int(nm.Nmcd.DwItemSpec) == p.selIdx {
+				nm.ClrTextBk, nm.ClrText = colSel, colSelText
+			} else {
+				nm.ClrTextBk, nm.ClrText = colBg, colText
+			}
+			return co.CDRF_NEWFONT
+		}
+		return co.CDRF_DODEFAULT
 	})
 }
 
@@ -275,10 +337,7 @@ func (p *Palette) refilter() {
 	for _, it := range p.visible {
 		p.list.AddItem(label(it))
 	}
-	if len(p.visible) > 0 {
-		p.list.Item(0).Select(true).Focus()
-	}
-	p.updatePreview()
+	p.setSelection(0)
 }
 
 // selected returns the highlighted item.
@@ -286,33 +345,35 @@ func (p *Palette) selected() (fuzzy.Item, bool) {
 	if len(p.visible) == 0 {
 		return fuzzy.Item{}, false
 	}
-	item, ok := p.list.FocusedItem()
-	if !ok {
+	if p.selIdx < 0 || p.selIdx >= len(p.visible) {
 		return p.visible[0], true
 	}
-	i := item.Index()
-	if i < 0 || i >= len(p.visible) {
-		return p.visible[0], true
-	}
-	return p.visible[i], true
+	return p.visible[p.selIdx], true
 }
 
 func (p *Palette) moveSelection(delta int) {
 	if len(p.visible) == 0 {
 		return
 	}
-	cur := 0
-	if item, ok := p.list.FocusedItem(); ok {
-		cur = item.Index()
-	}
-	next := cur + delta
+	next := p.selIdx + delta
 	switch {
 	case next < 0:
 		next = len(p.visible) - 1 // wrap, so Up from the top reaches the bottom
 	case next >= len(p.visible):
 		next = 0
 	}
-	p.list.Item(next).Select(true).Focus().EnsureVisible()
+	p.setSelection(next)
+}
+
+// setSelection moves the highlight, scrolls it into view and refreshes the
+// preview. Redrawing the whole list is cheap at this size and avoids tracking
+// which two rows changed.
+func (p *Palette) setSelection(i int) {
+	p.selIdx = i
+	if i >= 0 && i < len(p.visible) {
+		p.list.Item(i).EnsureVisible()
+	}
+	p.list.Hwnd().InvalidateRect(nil, true)
 	p.updatePreview()
 }
 
