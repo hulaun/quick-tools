@@ -40,6 +40,9 @@ func main() {
 	}
 
 	if *testScripts {
+		// A release build is a GUI binary with no console, so output would go
+		// nowhere without this.
+		winapi.AttachConsole()
 		os.Exit(runFixtures(scriptsDir))
 	}
 
@@ -48,6 +51,20 @@ func main() {
 		fmt.Fprintln(os.Stderr, "cannot locate the snippets folder:", err)
 		os.Exit(1)
 	}
+
+	// Only one copy may run: a second would fail to register the hotkey and sit
+	// there useless. Launching it again is nearly always someone trying to open
+	// the palette, so hand the request to the running copy and exit quietly.
+	instance, alreadyRunning, err := winapi.AcquireSingleInstance()
+	if alreadyRunning {
+		winapi.SignalExistingInstance()
+		return
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "could not check for a running instance:", err)
+		os.Exit(1)
+	}
+	defer instance.Release()
 
 	// Windows GUI is single-threaded, and RegisterHotKey delivers WM_HOTKEY to
 	// the registering thread. Both need this.
@@ -65,7 +82,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, "could not build the palette window:", err)
 		os.Exit(1)
 	}
-	os.Exit(palette.Run())
+	code := palette.Run()
+	instance.Release()
+	os.Exit(code)
 }
 
 // runFixtures is the red/green loop for writing a script: edit the .js, run

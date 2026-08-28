@@ -32,7 +32,8 @@ const (
 
 	cmdOpen      uint16 = 100
 	cmdAutoPaste uint16 = 101
-	cmdQuit      uint16 = 102
+	cmdAutostart uint16 = 102
+	cmdQuit      uint16 = 103
 )
 
 // tray owns the notification-area icon.
@@ -111,6 +112,12 @@ func (p *Palette) showTrayMenu() {
 		autoPasteFlags = winapi.MFString | winapi.MFChecked
 	}
 	winapi.AppendMenu(uintptr(menu), autoPasteFlags, cmdAutoPaste, "Paste automatically")
+
+	autostartFlags := uint32(winapi.MFString | winapi.MFUnchecked)
+	if winapi.AutostartEnabled() {
+		autostartFlags = winapi.MFString | winapi.MFChecked
+	}
+	winapi.AppendMenu(uintptr(menu), autostartFlags, cmdAutostart, "Start with Windows")
 	winapi.AppendMenu(uintptr(menu), winapi.MFSeparator, 0, "")
 	winapi.AppendMenu(uintptr(menu), winapi.MFString, cmdQuit, "Quit quick-tools")
 
@@ -139,6 +146,16 @@ func (p *Palette) onTrayCommand(cmd uint16) {
 		if err := config.Save(p.cfg); err != nil {
 			p.fatal("Could not save settings", err)
 		}
+	case cmdAutostart:
+		var err error
+		if winapi.AutostartEnabled() {
+			err = winapi.DisableAutostart()
+		} else {
+			err = winapi.EnableAutostart()
+		}
+		if err != nil {
+			p.fatal("Could not change the startup setting", err)
+		}
 	case cmdQuit:
 		p.wnd.Hwnd().PostMessage(co.WM_CLOSE, 0, 0)
 	}
@@ -158,5 +175,6 @@ func (p *Palette) trayEvents() {
 
 	p.wnd.On().WmCommand(cmdOpen, co.CMD_MENU, func() { p.onTrayCommand(cmdOpen) })
 	p.wnd.On().WmCommand(cmdAutoPaste, co.CMD_MENU, func() { p.onTrayCommand(cmdAutoPaste) })
+	p.wnd.On().WmCommand(cmdAutostart, co.CMD_MENU, func() { p.onTrayCommand(cmdAutostart) })
 	p.wnd.On().WmCommand(cmdQuit, co.CMD_MENU, func() { p.onTrayCommand(cmdQuit) })
 }

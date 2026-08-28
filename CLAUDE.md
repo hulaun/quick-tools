@@ -67,7 +67,7 @@ Build all the mechanical parts fully — those were never the point.
 | **M1** — palette UI + built-in transforms | Done. Dark themed palette, fuzzy search, live preview. |
 | **M2** — goja scripting + handoff | Done. Engine, hot-reload, fixture runner, stubs and spec all in place. |
 | **M3** — snippets | Done. Folder tree, searchable in the same palette, Enter copies. |
-| **M4** — packaging | Not started. |
+| **M4** — packaging | Done. Single instance, autostart, icon, manifest, windowless build. |
 
 ### What works today
 
@@ -80,7 +80,13 @@ Build all the mechanical parts fully — those were never the point.
 - `internal/ui` — the palette: dark theme, Segoe UI, DWM rounded corners,
   accent highlight, live preview. `internal/fuzzy` ranks entries.
 - `cmd/quicktools` — the real app.
-- Tray icon with a context menu: open, toggle auto-paste (persisted), quit.
+- Tray icon with a context menu: open, toggle auto-paste (persisted), toggle
+  start-with-Windows, quit.
+- Single instance via a named mutex; a second launch broadcasts a registered
+  window message asking the running copy to open, then exits.
+- `winres/` + `cmd/quicktools/rsrc_windows_*.syso`: app icon, version info, and
+  a manifest with per-monitor-v2 DPI and common controls v6. Regenerate with
+  `.uild.ps1 -Resources` after changing the icon or manifest.
   The icon is generated as a 32x32 ICO and `go:embed`ed in `internal/ui`.
 - `internal/script` — goja engine with a 2s interrupt, hot-reloading loader,
   and the `.test.json` fixture runner behind `quicktools.exe -test-scripts`.
@@ -106,6 +112,8 @@ Build all the mechanical parts fully — those were never the point.
   an OS rule, not a bug — do not try to defeat it.
 - Nothing has been pushed to the remote yet. The local repo has commits; ask
   before pushing.
+- The release binary is ~11 MB. goja is most of that. An earlier estimate of
+  ~8 MB in the plan was optimistic.
 
 ---
 
@@ -280,10 +288,11 @@ verbatim. It compiled and only failed on the duplicate-case check.
 default`. An earlier version of this file documented the `export` form; it does
 not work.
 
-**17. `-test-scripts` prints to stdout, so it needs a console.** Once M4 builds
-with `-H windowsgui` there is no console attached and the output goes nowhere.
-That flag will need `AttachConsole(ATTACH_PARENT_PROCESS)` first, or the runner
-moves to its own small command.
+**17. A `-H windowsgui` binary has no console.** Anything printed by a
+command-line flag goes nowhere. `winapi.AttachConsole` reattaches to the parent
+terminal (allocating one if there is none) and rebinds `os.Stdout`/`os.Stderr`,
+which Go bound at startup to handles that do not exist in a GUI process.
+`-test-scripts` calls it first. Verified working from the release build.
 
 **18. `IsDialogMessage` swallows Enter.** windigo's main loop calls it by
 default (`processDlgMsgs: true`) for dialog-style Tab navigation. It turns

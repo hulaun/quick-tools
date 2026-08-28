@@ -236,6 +236,15 @@ func (p *Palette) events() {
 		return 0
 	})
 
+	// A second copy of the app broadcasts this instead of starting up, so
+	// double-clicking the exe again opens the palette rather than doing nothing.
+	if msg := winapi.ShowPaletteMessage; msg != 0 {
+		p.wnd.On().Wm(co.WM(msg), func(_ ui.Wm) uintptr {
+			p.show()
+			return 0
+		})
+	}
+
 	// Clicking away dismisses the palette, the same as Esc.
 	p.wnd.On().Wm(co.WM_ACTIVATE, func(m ui.Wm) uintptr {
 		if m.WParam.LoWord() == 0 { // WA_INACTIVE
