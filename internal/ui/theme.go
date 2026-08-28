@@ -23,7 +23,7 @@ var (
 	colSurface = win.RGB(0x2b, 0x2b, 0x2b) // search box, list, preview
 	colText    = win.RGB(0xe8, 0xe8, 0xe8) // primary text
 	colBorder  = win.RGB(0x3a, 0x3a, 0x3a) // the window's thin outer border
-	colSel     = win.RGB(0x0f, 0x6c, 0xbd) // highlighted row
+	colSel     = win.RGB(0x0b, 0x53, 0x94) // highlighted row
 	colSelText = win.RGB(0xff, 0xff, 0xff) // text on a highlighted row
 )
 
@@ -142,7 +142,28 @@ func setCueBanner(h win.HWND, text string) {
 // darkenListView recolours a list view, which ignores WM_CTLCOLOR entirely and
 // has to be told its colours through its own messages.
 func darkenListView(h win.HWND) {
-	h.SendMessage(co.LVM_SETBKCOLOR, 0, win.LPARAM(colBg))
-	h.SendMessage(co.LVM_SETTEXTBKCOLOR, 0, win.LPARAM(colBg))
+	h.SendMessage(co.LVM_SETBKCOLOR, 0, win.LPARAM(colSurface))
+	h.SendMessage(co.LVM_SETTEXTBKCOLOR, 0, win.LPARAM(colSurface))
 	h.SendMessage(co.LVM_SETTEXTCOLOR, 0, win.LPARAM(colText))
+}
+
+// roundCorners clips a child control to a rounded rectangle.
+//
+// Child controls get no help from the desktop window manager -- its corner
+// preference rounds top-level windows only -- so the shape has to be imposed by
+// clipping. The corners are hard-edged rather than antialiased, which is barely
+// visible given how little the panel and window backgrounds differ.
+func roundCorners(h win.HWND, radius int) {
+	rc, err := h.GetWindowRect()
+	if err != nil {
+		return
+	}
+	w := int(rc.Right - rc.Left)
+	ht := int(rc.Bottom - rc.Top)
+	rgn := winapi.CreateRoundRectRgn(0, 0, w+1, ht+1, radius, radius)
+	if rgn == 0 {
+		return
+	}
+	// SetWindowRgn takes ownership of the region; it must not be deleted here.
+	h.SetWindowRgn(win.HRGN(rgn), true)
 }

@@ -182,16 +182,40 @@ window. The palette therefore never lets the control select anything: `selIdx`
 tracks the highlight and `NmCustomDraw` paints it. Do not reintroduce
 `.Select(true)` or `LVS_SHOWSELALWAYS`; it will silently undo the accent colour.
 
-**7. Themes and custom draw are separate fights.** `SetWindowTheme` with
+**7. A list view also repaints a *clicked* row in the system accent colour.**
+Not selecting from our own code was not enough -- clicking selects the row, and
+a selected row ignores custom draw. `LvnItemChanging` now vetoes every
+selection change, so the control never has anything selected and the only
+highlight is the one we paint. Verified by sampling the pixel colour, not by
+eye: the control's accent (#0078D4) and our blue look nearly identical on
+screen.
+
+**8. windigo gives every control `WS_EX_CLIENTEDGE` by default.** That sunken
+3D edge is the most dated detail on a Win32 window. Clearing `WndStyle` does
+not remove it -- the *extended* style must be overridden too, with
+`WndExStyle(co.WS_EX_LEFT)`.
+
+**9. Child controls get no rounded corners from DWM.** The corner preference
+applies to top-level windows only, so panels are clipped to shape with
+`SetWindowRgn` and a round-rect region (`winapi.CreateRoundRectRgn`). Note
+`SetWindowRgn` takes ownership of the region -- deleting it afterwards is a
+double free.
+
+**10. Appearance setup must not run in `WM_CREATE`.** The child controls do not
+reliably have window handles while the parent is still being created, and
+styling a zero handle fails silently -- which looks exactly like the styling
+code being wrong. It runs from a `sync.Once` on first show instead.
+
+**11. Themes and custom draw are separate fights.** `SetWindowTheme` with
 `DarkMode_Explorer` is what makes scrollbars dark; it is unrelated to the
 selection problem above (removing it does not fix the highlight).
 
-**8. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
+**12. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
 logical coordinates but `CopyFromScreen` captures physical pixels, so the window
 appears at 1.5x its reported position and looks mispositioned when it is not.
 Call `SetProcessDPIAware()` in the capture script first.
 
-**9. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**13. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one

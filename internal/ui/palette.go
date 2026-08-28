@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
@@ -36,6 +37,7 @@ const (
 	searchH    = 24       // height of the search box
 	listW      = 250      // width of the transform list
 	rowGap     = 8        // gap between the search box and the panes below
+	radius     = 10       // corner radius of the search box, list and preview
 )
 
 // Palette is the command palette window.
@@ -67,6 +69,9 @@ type Palette struct {
 	// so it reads this rather than querying the control each time.
 	selIdx int
 
+	// look ensures the one-off appearance setup runs exactly once.
+	look sync.Once
+
 	// shown guards against re-entering hide() while hiding, which the
 	// WM_ACTIVATE handler would otherwise cause.
 	shown bool
@@ -96,7 +101,12 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 		ui.OptsEdit().
 			Position(ui.Dpi(pad, pad)).
 			Width(ui.DpiX(winW-pad*2)).
-			Height(ui.DpiY(searchH)),
+			Height(ui.DpiY(searchH)).
+			// No border. windigo defaults every control to WS_EX_CLIENTEDGE -- the
+			// sunken 3D edge -- so the extended style must be overridden too;
+			// clearing WndStyle alone leaves the border in place.
+			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_TABSTOP).
+			WndExStyle(co.WS_EX_LEFT),
 	)
 
 	listTop := pad + searchH + rowGap
@@ -110,7 +120,9 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			CtrlExStyle(co.LVS_EX_FULLROWSELECT).
 			// One column holding "Group: Name". A separate group column was harder
 			// to read than simply writing the label out as a phrase.
-			Column("Transform", listW-24),
+			Column("Transform", listW-24).
+			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_TABSTOP).
+			WndExStyle(co.WS_EX_LEFT),
 	)
 
 	preview := ui.NewEdit(wnd,
@@ -119,7 +131,8 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			Width(ui.DpiX(winW-listW-rowGap-pad*2)).
 			Height(ui.DpiY(listH)).
 			CtrlStyle(co.ES_MULTILINE|co.ES_READONLY|co.ES_AUTOVSCROLL).
-			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_VSCROLL|co.WS_TABSTOP),
+			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_VSCROLL|co.WS_TABSTOP).
+			WndExStyle(co.WS_EX_LEFT),
 	)
 
 	p := &Palette{
@@ -165,18 +178,6 @@ func (p *Palette) events() {
 			p.fatal(fmt.Sprintf("Could not register %s", p.cfg.Hotkey), err)
 		}
 
-		for _, err := range applyChrome(p.wnd.Hwnd()) {
-			// Not fatal: these are Windows 11 features, and on 10 they simply are
-			// not there. Reported so a missing rounded corner is explained rather
-			// than mysterious.
-			fmt.Fprintln(os.Stderr, "window chrome:", err)
-		}
-		for _, h := range []win.HWND{p.search.Hwnd(), p.list.Hwnd(), p.preview.Hwnd()} {
-			p.theme.applyFont(h)
-			darkenScrollbars(h)
-		}
-		darkenListView(p.list.Hwnd())
-		setCueBanner(p.search.Hwnd(), "Search transforms")
 		return 0
 	})
 
@@ -227,6 +228,14 @@ func (p *Palette) events() {
 		return p.search.Hwnd().DefSubclassProc(co.WM_KEYDOWN, m.WParam, m.LParam)
 	})
 
+	// Refuse every selection change the control tries to make.
+	//
+	// Not selecting from our own code was not enough: clicking a row makes the
+	// control select it, and a selected row is painted in the system accent
+	// colour with custom draw ignored. Vetoing here leaves the control with
+	// nothing ever selected, so the highlight is only ever the one we draw.
+	p.list.On().LvnItemChanging(func(_ *win.NMLISTVIEW) bool { return true })
+
 	// Clicking a row moves the highlight to it.
 	p.list.On().NmClick(func(nm *win.NMITEMACTIVATE) {
 		if nm.IItem >= 0 {
@@ -256,8 +265,12 @@ func (p *Palette) events() {
 			if int(nm.Nmcd.DwItemSpec) == p.selIdx {
 				nm.ClrTextBk, nm.ClrText = colSel, colSelText
 			} else {
-				nm.ClrTextBk, nm.ClrText = colBg, colText
+				nm.ClrTextBk, nm.ClrText = colSurface, colText
 			}
+			// Clearing the focus bit is what removes the dotted rectangle the list
+			// draws around a clicked row. WM_UPDATEUISTATE alone does not cover a
+			// row focused by mouse.
+			nm.Nmcd.UItemState &^= co.CDIS_FOCUS
 			return co.CDRF_NEWFONT
 		}
 		return co.CDRF_DODEFAULT
@@ -268,6 +281,12 @@ func (p *Palette) events() {
 // snapshots the clipboard and the target window before doing anything that
 // could change either.
 func (p *Palette) show() {
+	// Appearance is applied here rather than in WM_CREATE: while the parent is
+	// still being created the child controls do not reliably have window handles
+	// yet, and styling a zero handle fails silently -- which looks exactly like
+	// the styling code being wrong.
+	p.look.Do(p.applyLook)
+
 	if p.shown {
 		p.hide(true)
 		return
@@ -291,6 +310,26 @@ func (p *Palette) show() {
 	p.wnd.Hwnd().ShowWindow(co.SW_SHOW)
 	winapi.RestoreForeground(uintptr(p.wnd.Hwnd()))
 	p.search.Hwnd().SetFocus()
+}
+
+// applyLook does the one-off appearance work: window chrome, fonts, control
+// colours, dark scrollbars and rounded corners.
+func (p *Palette) applyLook() {
+	for _, err := range applyChrome(p.wnd.Hwnd()) {
+		// Not fatal: these are Windows 11 features, absent on 10. Reported so a
+		// square corner has a stated reason rather than being a mystery.
+		fmt.Fprintln(os.Stderr, "window chrome:", err)
+	}
+
+	r := ui.DpiX(radius)
+	for _, h := range []win.HWND{p.search.Hwnd(), p.list.Hwnd(), p.preview.Hwnd()} {
+		p.theme.applyFont(h)
+		darkenScrollbars(h)
+		roundCorners(h, r)
+	}
+	darkenListView(p.list.Hwnd())
+	setCueBanner(p.search.Hwnd(), "Search transforms")
+	winapi.HideFocusRectangles(uintptr(p.wnd.Hwnd()))
 }
 
 // hide dismisses the palette. restoreFocus is false when Windows has already
