@@ -1,0 +1,62 @@
+[
+  {
+    "name": "simple pairs",
+    "in": "a=1&b=two",
+    "out": "{\n  \"a\": \"1\",\n  \"b\": \"two\"\n}"
+  },
+  {
+    "name": "full url",
+    "in": "https://api.example.com/users?page=2&tag=a",
+    "out": "{\n  \"page\": \"2\",\n  \"tag\": \"a\"\n}"
+  },
+  {
+    "name": "fragment is dropped",
+    "in": "https://x/y?a=1#section",
+    "out": "{\n  \"a\": \"1\"\n}"
+  },
+  {
+    "name": "plus means space",
+    "in": "q=hello+world",
+    "out": "{\n  \"q\": \"hello world\"\n}"
+  },
+  {
+    "name": "percent decoding",
+    "in": "x=%3D%26&y=caf%C3%A9",
+    "out": "{\n  \"x\": \"=&\",\n  \"y\": \"café\"\n}"
+  },
+  {
+    "name": "repeated key becomes an array",
+    "in": "a=1&a=2&a=3",
+    "out": "{\n  \"a\": [\n    \"1\",\n    \"2\",\n    \"3\"\n  ]\n}"
+  },
+  {
+    "name": "values stay strings",
+    "in": "id=007",
+    "out": "{\n  \"id\": \"007\"\n}"
+  },
+  {
+    "name": "empty value",
+    "in": "a=",
+    "out": "{\n  \"a\": \"\"\n}"
+  },
+  {
+    "name": "bare key",
+    "in": "a&b=1",
+    "out": "{\n  \"a\": \"\",\n  \"b\": \"1\"\n}"
+  },
+  {
+    "name": "bracket nesting",
+    "in": "u[name]=jo&u[age]=3",
+    "out": "{\n  \"u\": {\n    \"name\": \"jo\",\n    \"age\": \"3\"\n  }\n}"
+  },
+  {
+    "name": "explicit array brackets",
+    "in": "a[]=1&a[]=2",
+    "out": "{\n  \"a\": [\n    \"1\",\n    \"2\"\n  ]\n}"
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
+    "error": true
+  }
+]

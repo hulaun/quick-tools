@@ -29,10 +29,19 @@ already won.
 
 ## Division of work — IMPORTANT
 
-The user is building this partly to learn. Two pieces are **reserved for them**:
+The user is building this partly to learn. **Six scripts are reserved for
+them**, laddered by difficulty:
 
-- `scripts/java-to-json.js` — Java `toString()` output → JSON
-- `scripts/js-object-to-json.js` — JavaScript object literal → JSON
+1. `scripts/properties-to-json.js` — line parsing, dotted-key nesting
+2. `scripts/query-string-to-json.js` — decoding, repeated keys → arrays
+3. `scripts/js-object-to-json.js` — recursive descent over a bracketed grammar
+4. `scripts/curl-to-json.js` — a real tokeniser, scan separated from interpret
+5. `scripts/java-to-json.js` — depth tracking, ambiguity policy
+6. `scripts/stacktrace-to-json.js` — recursion with no brackets to guide it
+
+None duplicates a built-in, so nothing is broken while they are unwritten —
+each is a capability the tool does not have yet. That was deliberate: handing
+back a working built-in as a stub would have cost the user a feature.
 
 **Do not implement these.** The scaffolding is finished as of M2:
 - stubs with the contract wired up and hints, but no parser

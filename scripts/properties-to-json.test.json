@@ -1,0 +1,57 @@
+[
+  {
+    "name": "single pair",
+    "in": "a=1",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "comments and blank lines",
+    "in": "# note\n\n!bang note\na=1",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "dotted keys nest",
+    "in": "db.host=localhost\ndb.port=5432",
+    "out": "{\n  \"db\": {\n    \"host\": \"localhost\",\n    \"port\": 5432\n  }\n}"
+  },
+  {
+    "name": "deep nesting",
+    "in": "a.b.c=1",
+    "out": "{\n  \"a\": {\n    \"b\": {\n      \"c\": 1\n    }\n  }\n}"
+  },
+  {
+    "name": "spaces are trimmed",
+    "in": "name = John Doe",
+    "out": "{\n  \"name\": \"John Doe\"\n}"
+  },
+  {
+    "name": "empty value",
+    "in": "empty=",
+    "out": "{\n  \"empty\": \"\"\n}"
+  },
+  {
+    "name": "quotes preserve spaces",
+    "in": "padded=\" x \"",
+    "out": "{\n  \"padded\": \" x \"\n}"
+  },
+  {
+    "name": "colon separator",
+    "in": "a:1",
+    "out": "{\n  \"a\": 1\n}"
+  },
+  {
+    "name": "types",
+    "in": "a=true\nb=null\nc=-1.5\nd=12abc",
+    "out": "{\n  \"a\": true,\n  \"b\": null,\n  \"c\": -1.5,\n  \"d\": \"12abc\"\n}"
+  },
+  {
+    "name": "only the first separator splits",
+    "in": "url=http://x/y?a=1",
+    "out": "{\n  \"url\": \"http://x/y?a=1\"\n}"
+  },
+  {
+    "name": "rejects a line with no separator",
+    "in": "a=1\njust some words",
+    "error": true
+  }
+]

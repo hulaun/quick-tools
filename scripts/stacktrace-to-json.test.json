@@ -1,0 +1,42 @@
+[
+  {
+    "name": "type, message and frames",
+    "in": "java.lang.IllegalStateException: boom\n\tat com.example.Service.doWork(Service.java:42)\n\tat com.example.Main.main(Main.java:10)",
+    "out": "{\n  \"type\": \"java.lang.IllegalStateException\",\n  \"message\": \"boom\",\n  \"frames\": [\n    {\n      \"class\": \"com.example.Service\",\n      \"method\": \"doWork\",\n      \"file\": \"Service.java\",\n      \"line\": 42\n    },\n    {\n      \"class\": \"com.example.Main\",\n      \"method\": \"main\",\n      \"file\": \"Main.java\",\n      \"line\": 10\n    }\n  ],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "no message",
+    "in": "java.lang.NullPointerException\n\tat a.B.c(B.java:1)",
+    "out": "{\n  \"type\": \"java.lang.NullPointerException\",\n  \"message\": null,\n  \"frames\": [\n    {\n      \"class\": \"a.B\",\n      \"method\": \"c\",\n      \"file\": \"B.java\",\n      \"line\": 1\n    }\n  ],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "caused by chain",
+    "in": "java.lang.IllegalStateException: boom\n\tat com.example.Service.doWork(Service.java:42)\n\tat com.example.Main.main(Main.java:10)\nCaused by: java.lang.NullPointerException: inner\n\tat com.example.Repo.find(Repo.java:88)\n\t... 3 more",
+    "out": "{\n  \"type\": \"java.lang.IllegalStateException\",\n  \"message\": \"boom\",\n  \"frames\": [\n    {\n      \"class\": \"com.example.Service\",\n      \"method\": \"doWork\",\n      \"file\": \"Service.java\",\n      \"line\": 42\n    },\n    {\n      \"class\": \"com.example.Main\",\n      \"method\": \"main\",\n      \"file\": \"Main.java\",\n      \"line\": 10\n    }\n  ],\n  \"causedBy\": {\n    \"type\": \"java.lang.NullPointerException\",\n    \"message\": \"inner\",\n    \"frames\": [\n      {\n        \"class\": \"com.example.Repo\",\n        \"method\": \"find\",\n        \"file\": \"Repo.java\",\n        \"line\": 88\n      }\n    ],\n    \"causedBy\": null\n  }\n}"
+  },
+  {
+    "name": "message containing a colon",
+    "in": "java.lang.IllegalArgumentException: bad url: http://x\n\tat a.B.c(B.java:1)",
+    "out": "{\n  \"type\": \"java.lang.IllegalArgumentException\",\n  \"message\": \"bad url: http://x\",\n  \"frames\": [\n    {\n      \"class\": \"a.B\",\n      \"method\": \"c\",\n      \"file\": \"B.java\",\n      \"line\": 1\n    }\n  ],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "nested class in the frame",
+    "in": "E: m\n\tat com.example.Outer$Inner.run(Outer.java:7)",
+    "out": "{\n  \"type\": \"E\",\n  \"message\": \"m\",\n  \"frames\": [\n    {\n      \"class\": \"com.example.Outer$Inner\",\n      \"method\": \"run\",\n      \"file\": \"Outer.java\",\n      \"line\": 7\n    }\n  ],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "native method has no line number",
+    "in": "E: m\n\tat java.lang.Thread.start0(Native Method)",
+    "out": "{\n  \"type\": \"E\",\n  \"message\": \"m\",\n  \"frames\": [\n    {\n      \"class\": \"java.lang.Thread\",\n      \"method\": \"start0\",\n      \"file\": \"Native Method\",\n      \"line\": null\n    }\n  ],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "no frames at all",
+    "in": "java.lang.Error: lonely",
+    "out": "{\n  \"type\": \"java.lang.Error\",\n  \"message\": \"lonely\",\n  \"frames\": [],\n  \"causedBy\": null\n}"
+  },
+  {
+    "name": "rejects text that is not a stack trace",
+    "in": "hello world",
+    "error": true
+  }
+]

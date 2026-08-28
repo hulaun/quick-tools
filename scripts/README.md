@@ -51,12 +51,25 @@ made visible. Exits non-zero if anything fails, so it drops into a watch loop.
 
 ---
 
-# The two parsers
+# The stubs
 
-`java-to-json.js` and `js-object-to-json.js` are stubs. The fixtures are
-written and currently red. `csv-line-to-json.js` is a complete worked parser to
-copy the shape from — it solves a different problem but has the same
-scan → build → emit structure.
+Six scripts are yours to write. All have fixtures and all are currently red.
+`csv-line-to-json.js` is a complete worked parser to copy the shape from.
+
+They ladder in difficulty — doing them roughly in this order means each one
+uses a skill the previous one built:
+
+| # | Script | Teaches |
+|---|---|---|
+| 1 | `properties-to-json.js` | line-oriented parsing; nesting flat dotted keys |
+| 2 | `query-string-to-json.js` | normalising messy input; repeated keys becoming arrays |
+| 3 | `js-object-to-json.js` | recursive descent over a bracketed grammar |
+| 4 | `curl-to-json.js` | writing a real tokeniser; separating scan from interpret |
+| 5 | `java-to-json.js` | depth tracking; deciding what ambiguous input means |
+| 6 | `stacktrace-to-json.js` | recursion over structure with no brackets to guide you |
+
+None of these duplicate a built-in, so nothing stops working while they are
+unwritten — each is a new capability the tool does not have yet.
 
 ## Shared type rules
 
@@ -187,3 +200,101 @@ in a dozen places.
 
 Recursion gives you nesting for free: `parseArray` calls `parseValue`, which may
 call `parseObject`, which calls `parseValue` again.
+
+
+---
+
+## `properties-to-json.js`
+
+```
+# comment          # and ! and // start a comment line
+db.host=localhost  = or : separates key from value
+name = John Doe    surrounding whitespace is trimmed
+padded=" x "       surrounding quotes are stripped, inner spaces kept
+empty=             an empty value is ""
+url=http://x?a=1   only the FIRST separator splits
+```
+
+Dotted keys nest: `db.host` and `db.port` produce one `db` object with two
+fields. Bare values follow the shared type rules above.
+
+A non-empty, non-comment line with no separator is an error — better to say so
+than to silently drop a line someone meant to set.
+
+---
+
+## `query-string-to-json.js`
+
+Accepts either a bare query string or a whole URL. If there is a `?`, take what
+follows it; drop any `#fragment`.
+
+```
+a=1&b=two          simple pairs
+q=hello+world      "+" means space -- decodeURIComponent does NOT do this
+x=%3D              percent-decode both keys and values
+a=1&a=2            a repeated key becomes ["1", "2"]
+a&b=1              a bare key has the value ""
+u[name]=jo         bracket keys nest:  { "u": { "name": "jo" } }
+a[]=1&a[]=2        empty brackets force an array
+```
+
+**Values stay strings.** This is a deliberate exception to the shared type
+rules: a `1` in a URL is nearly always an id, and coercing `007` to `7` loses
+information you cannot get back.
+
+Empty input is an error.
+
+---
+
+## `curl-to-json.js`
+
+Output always has all four keys, so the shape is predictable:
+
+```json
+{ "method": "GET", "url": "...", "headers": {}, "body": null }
+```
+
+| Flag | Meaning |
+|---|---|
+| `-X`, `--request` | the method |
+| `-H`, `--header` | `"Name: value"` — split on the **first** `: ` only |
+| `-d`, `--data`, `--data-raw`, `--data-binary` | the body |
+| anything else | ignored |
+
+The first argument that is not a flag and not consumed by one is the URL.
+Method defaults to `GET`, or `POST` when there is a body and no explicit `-X`.
+
+The tokeniser has to handle single quotes, double quotes, and a backslash at
+end of line as a continuation (devtools emits those). Input not starting with
+`curl` is an error.
+
+---
+
+## `stacktrace-to-json.js`
+
+```json
+{
+  "type": "java.lang.IllegalStateException",
+  "message": "boom",
+  "frames": [
+    { "class": "com.example.Service", "method": "doWork",
+      "file": "Service.java", "line": 42 }
+  ],
+  "causedBy": null
+}
+```
+
+- The header line is `type: message`, split on the **first** `": "`. A message
+  may itself contain colons (`bad url: http://x`). A trace with no message has
+  no colon at all, and `message` is then `null`.
+- A frame line is `at CLASS.METHOD(FILE:LINE)`. Class and method split on the
+  **last** dot before the `(` — the package is full of dots. Inner classes
+  appear as `Outer$Inner`, which needs no special handling.
+- `at java.lang.Thread.start0(Native Method)` has no line number: `file` is
+  `"Native Method"` and `line` is `null`.
+- `... 3 more` lines are ignored.
+- `Caused by:` starts a nested exception. Recurse and attach it as `causedBy`,
+  which is `null` when there is none. The chain can be any depth, and nothing
+  marks where one exception ends except the next `Caused by:` — you decide the
+  boundary while scanning forwards.
+- Input with no frame lines and no recognisable header is an error.
