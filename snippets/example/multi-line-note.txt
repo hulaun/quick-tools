@@ -1,0 +1,4 @@
+This snippet spans several lines.
+
+Everything in the file is pasted verbatim, apart from trailing blank
+lines, which are stripped so you do not get a stray newline.

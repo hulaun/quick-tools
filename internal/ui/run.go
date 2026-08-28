@@ -15,7 +15,7 @@ import (
 // Private window messages. WM_APP and above belong to the application.
 const (
 	wmRunDone        = co.WM(0x8000 + 2) // a transform finished on a worker
-	wmScriptsChanged = co.WM(0x8000 + 3) // the scripts folder changed on disk
+	wmSourcesChanged = co.WM(0x8000 + 3) // the scripts or snippets folder changed
 )
 
 // runResult is the outcome of one transform run.
@@ -113,8 +113,9 @@ func (p *Palette) runEvents() {
 		return 0
 	})
 
-	p.wnd.On().Wm(wmScriptsChanged, func(_ ui.Wm) uintptr {
+	p.wnd.On().Wm(wmSourcesChanged, func(_ ui.Wm) uintptr {
 		p.reloadScripts()
+		p.reloadSnippets()
 		return 0
 	})
 }

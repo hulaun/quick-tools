@@ -66,7 +66,7 @@ Build all the mechanical parts fully — those were never the point.
 | **M0** — de-risk spike | Done and confirmed working by the user in a real app. |
 | **M1** — palette UI + built-in transforms | Done. Dark themed palette, fuzzy search, live preview. |
 | **M2** — goja scripting + handoff | Done. Engine, hot-reload, fixture runner, stubs and spec all in place. |
-| **M3** — snippets | Not started. |
+| **M3** — snippets | Done. Folder tree, searchable in the same palette, Enter copies. |
 | **M4** — packaging | Not started. |
 
 ### What works today
@@ -84,6 +84,10 @@ Build all the mechanical parts fully — those were never the point.
   The icon is generated as a 32x32 ICO and `go:embed`ed in `internal/ui`.
 - `internal/script` — goja engine with a 2s interrupt, hot-reloading loader,
   and the `.test.json` fixture runner behind `quicktools.exe -test-scripts`.
+- `internal/snippet` — walks `snippets/`, one entry per text file, folder as
+  the group. Registered as Transforms whose Run ignores input and returns the
+  file, so the fuzzy index, preview, paste path and auto-paste all work
+  unchanged.
 - Transforms run on a worker goroutine and post results back via `wmRunDone`;
   stale preview results are discarded. A slow script cannot freeze the window.
 
@@ -281,7 +285,18 @@ with `-H windowsgui` there is no console attached and the output goes nowhere.
 That flag will need `AttachConsole(ATTACH_PARENT_PROCESS)` first, or the runner
 moves to its own small command.
 
-**18. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**18. `IsDialogMessage` swallows Enter.** windigo's main loop calls it by
+default (`processDlgMsgs: true`) for dialog-style Tab navigation. It turns
+VK_RETURN into a dialog IDOK command, so the key never reaches the search box
+subclass and pressing Enter silently does nothing -- while arrows and typing
+work fine, which makes it look like an Enter-specific bug in our code. The
+window sets `ProcessDlgMsgs(false)`; this window does not use Tab navigation.
+
+This shipped broken from M1 to M3 because the earlier testing only exercised
+preview, arrow keys and mouse clicks -- never the Enter key. When verifying a
+UI, test the path that commits the action, not just the one that displays it.
+
+**19. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one

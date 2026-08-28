@@ -15,6 +15,7 @@ import (
 
 	"github.com/hulaun/quick-tools/internal/config"
 	"github.com/hulaun/quick-tools/internal/script"
+	"github.com/hulaun/quick-tools/internal/snippet"
 	"github.com/hulaun/quick-tools/internal/transform"
 	"github.com/hulaun/quick-tools/internal/ui"
 	"github.com/hulaun/quick-tools/internal/winapi"
@@ -42,6 +43,12 @@ func main() {
 		os.Exit(runFixtures(scriptsDir))
 	}
 
+	snippetsDir, err := config.ResolveDir(cfg.SnippetsDir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cannot locate the snippets folder:", err)
+		os.Exit(1)
+	}
+
 	// Windows GUI is single-threaded, and RegisterHotKey delivers WM_HOTKEY to
 	// the registering thread. Both need this.
 	runtime.LockOSThread()
@@ -53,7 +60,7 @@ func main() {
 	reg := transform.NewRegistry()
 	transform.RegisterBuiltins(reg)
 
-	palette, err := ui.New(cfg, reg, script.NewLoader(scriptsDir))
+	palette, err := ui.New(cfg, reg, script.NewLoader(scriptsDir), snippet.NewStore(snippetsDir))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not build the palette window:", err)
 		os.Exit(1)

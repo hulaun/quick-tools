@@ -11,7 +11,8 @@ import (
 	"github.com/hulaun/quick-tools/internal/transform"
 )
 
-// scriptPollInterval is how often the scripts folder is checked for edits.
+// scriptPollInterval is how often the scripts and snippets folders are checked
+// for edits.
 //
 // A real filesystem watcher would be tidier, but it is another dependency and
 // another failure mode for something that only has to feel immediate to a
@@ -53,16 +54,16 @@ func (p *Palette) reloadScripts() {
 	}
 }
 
-// watchScripts polls for edits and asks the UI thread to reload.
+// watchSources polls both folders for edits and asks the UI thread to reload.
 //
 // The goroutine only ever signals; it never touches the registry itself. That
 // keeps every mutation on the UI thread and avoids needing a lock around the
 // palette's state.
-func (p *Palette) watchScripts(hwnd win.HWND) {
+func (p *Palette) watchSources(hwnd win.HWND) {
 	go func() {
 		for range time.Tick(scriptPollInterval) {
-			if p.loader.Changed() {
-				hwnd.PostMessage(wmScriptsChanged, 0, 0)
+			if p.loader.Changed() || p.snippets.Changed() {
+				hwnd.PostMessage(wmSourcesChanged, 0, 0)
 			}
 		}
 	}()

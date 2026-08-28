@@ -47,17 +47,19 @@ type Palette struct {
 	list    *ui.ListView
 	preview *ui.Edit
 
-	cfg    config.Config
-	reg    *transform.Registry
-	index  *fuzzy.Index
-	theme  *theme
-	tray   *tray
-	loader scriptLoader
-	runner *runner
+	cfg      config.Config
+	reg      *transform.Registry
+	index    *fuzzy.Index
+	theme    *theme
+	tray     *tray
+	loader   scriptLoader
+	snippets snippetStore
+	runner   *runner
 
-	// scriptIDs are the transform ids currently contributed by scripts, so the
-	// previous generation can be removed on reload.
-	scriptIDs []string
+	// scriptIDs and snippetIDs are the transform ids currently contributed by
+	// each source, so the previous generation can be removed on reload.
+	scriptIDs  []string
+	snippetIDs []string
 
 	// visible mirrors the rows currently in the list view, so a row index can be
 	// mapped back to the item it represents.
@@ -86,7 +88,7 @@ type Palette struct {
 
 // New builds the palette window and its controls. Nothing is displayed yet --
 // the window is created hidden and stays that way until the hotkey fires.
-func New(cfg config.Config, reg *transform.Registry, loader scriptLoader) (*Palette, error) {
+func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippets snippetStore) (*Palette, error) {
 	th, err := newTheme()
 	if err != nil {
 		return nil, err
@@ -108,6 +110,13 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader) (*Pale
 			// Only compositing the whole hierarchy removes it.
 			ExStyle(co.WS_EX_TOOLWINDOW | co.WS_EX_TOPMOST | co.WS_EX_COMPOSITED).
 			ClassBrush(th.bg).
+			// Suppress the window loop's IsDialogMessage call. It exists for
+			// dialog-style Tab navigation between controls, which this window does
+			// not use -- focus stays in the search box and the list is driven from
+			// there. Left on, it swallows Enter and turns it into a dialog IDOK
+			// command, so the key never reaches the search box subclass and
+			// selecting an entry silently does nothing.
+			ProcessDlgMsgs(false).
 			CmdShow(co.SW_HIDE),
 	)
 
@@ -159,18 +168,20 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader) (*Pale
 	}
 
 	p := &Palette{
-		wnd:     wnd,
-		search:  search,
-		list:    list,
-		preview: preview,
-		cfg:     cfg,
-		reg:     reg,
-		theme:   th,
-		tray:    tr,
-		loader:  loader,
-		runner:  newRunner(),
+		wnd:      wnd,
+		search:   search,
+		list:     list,
+		preview:  preview,
+		cfg:      cfg,
+		reg:      reg,
+		theme:    th,
+		tray:     tr,
+		loader:   loader,
+		snippets: snippets,
+		runner:   newRunner(),
 	}
 	p.reloadScripts()
+	p.reloadSnippets()
 	p.events()
 	return p, nil
 }
@@ -204,7 +215,7 @@ func (p *Palette) events() {
 			p.fatal(fmt.Sprintf("Could not register %s", p.cfg.Hotkey), err)
 		}
 
-		p.watchScripts(p.wnd.Hwnd())
+		p.watchSources(p.wnd.Hwnd())
 
 		if err := p.tray.add(p.wnd.Hwnd(), "quick-tools -- "+p.cfg.Hotkey); err != nil {
 			// Without the icon there is no way to quit short of Task Manager, so
