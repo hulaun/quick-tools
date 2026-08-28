@@ -92,7 +92,14 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			Style(co.WS_POPUP | co.WS_CLIPCHILDREN).
 			// TOOLWINDOW keeps it out of the taskbar and Alt+Tab; TOPMOST keeps it
 			// above the window we are about to paste into.
-			ExStyle(co.WS_EX_TOOLWINDOW | co.WS_EX_TOPMOST).
+			//
+			// COMPOSITED renders the window and every child into one off-screen
+			// buffer. LVS_EX_DOUBLEBUFFER only covers painting *inside* the list;
+			// when the scrollbar appears or disappears the control's non-client
+			// area changes and the parent repaints the strip underneath it, and
+			// that hand-off between two windows is the frame that flashes dark.
+			// Only compositing the whole hierarchy removes it.
+			ExStyle(co.WS_EX_TOOLWINDOW | co.WS_EX_TOPMOST | co.WS_EX_COMPOSITED).
 			ClassBrush(th.bg).
 			CmdShow(co.SW_HIDE),
 	)

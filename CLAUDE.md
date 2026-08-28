@@ -218,7 +218,12 @@ delete and insert repaints, and so does the scrollbar appearing or disappearing
 as the row count changes -- which is why the flash only showed once the list was
 long enough to need a scrollbar. `refilter` wraps the rebuild in
 `SetRedraw(false)`/`SetRedraw(true)`, and the list carries
-`LVS_EX_DOUBLEBUFFER` so the erase-then-paint happens off-screen. Note the
+`LVS_EX_DOUBLEBUFFER` so the erase-then-paint happens off-screen. That was not
+enough on its own: `LVS_EX_DOUBLEBUFFER` covers painting *inside* the list, but
+when the scrollbar appears or disappears the control's non-client area changes
+and the parent repaints the strip beneath it, and that hand-off between two
+windows is what flashed. The parent therefore also carries `WS_EX_COMPOSITED`,
+which renders the whole hierarchy into one buffer. Note the
 invalidate in `setSelection` deliberately keeps `erase: true`; with double
 buffering it costs nothing, and `false` would leave stale rows behind when a
 filter shrinks the list.
