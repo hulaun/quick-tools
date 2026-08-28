@@ -206,16 +206,23 @@ reliably have window handles while the parent is still being created, and
 styling a zero handle fails silently -- which looks exactly like the styling
 code being wrong. It runs from a `sync.Once` on first show instead.
 
-**11. Themes and custom draw are separate fights.** `SetWindowTheme` with
+**11. `OptsListView.Column(title, width)` does no DPI scaling.** Unlike
+`Position` and `Size`, the width goes straight to the control as raw pixels, so
+a value meant as logical units comes out too narrow on a scaled display -- 60%
+of the panel at 150%, with every label truncated. `refilter` now calls
+`Col(0).SetWidthToFill()` after populating, which sizes to the real client
+width and adapts as the scrollbar appears and disappears.
+
+**12. Themes and custom draw are separate fights.** `SetWindowTheme` with
 `DarkMode_Explorer` is what makes scrollbars dark; it is unrelated to the
 selection problem above (removing it does not fix the highlight).
 
-**12. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
+**13. Screenshots need a DPI-aware capture.** A DPI-unaware PowerShell reports
 logical coordinates but `CopyFromScreen` captures physical pixels, so the window
 appears at 1.5x its reported position and looks mispositioned when it is not.
 Call `SetProcessDPIAware()` in the capture script first.
 
-**13. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
+**14. Known `go vet` finding.** `internal/winapi/clipboard.go` has one
 `possible misuse of unsafe.Pointer` in `lockGlobal`. It is sound and documented:
 the memory came from `GlobalAlloc`, so it lives outside the Go heap and the GC
 cannot move it. All such conversions are deliberately funnelled through that one

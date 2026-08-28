@@ -120,7 +120,11 @@ func New(cfg config.Config, reg *transform.Registry) (*Palette, error) {
 			CtrlExStyle(co.LVS_EX_FULLROWSELECT).
 			// One column holding "Group: Name". A separate group column was harder
 			// to read than simply writing the label out as a phrase.
-			Column("Transform", listW-24).
+			//
+			// Column() passes its width straight to the control as raw pixels --
+			// unlike Position and Size, it does no DPI scaling -- so the value has
+			// to be scaled here. refilter() then stretches it to fill exactly.
+			Column("Transform", ui.DpiX(listW-24)).
 			WndStyle(co.WS_CHILD|co.WS_VISIBLE|co.WS_TABSTOP).
 			WndExStyle(co.WS_EX_LEFT),
 	)
@@ -375,6 +379,12 @@ func (p *Palette) refilter() {
 	p.list.DeleteAllItems()
 	for _, it := range p.visible {
 		p.list.AddItem(label(it))
+	}
+
+	// Stretch the column to the full client width. Done after populating,
+	// because whether a vertical scrollbar is present changes that width.
+	if p.list.ColCount() > 0 {
+		p.list.Col(0).SetWidthToFill()
 	}
 	p.setSelection(0)
 }
