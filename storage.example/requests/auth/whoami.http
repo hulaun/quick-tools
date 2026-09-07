@@ -1,0 +1,4 @@
+# @name Who am I
+GET {{base}}/auth/me
+Authorization: Bearer {{token}}
+Accept: application/json

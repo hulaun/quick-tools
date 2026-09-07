@@ -85,7 +85,13 @@ func RunFixtures(s *Script, cases []Case) []Result {
 
 // Report renders results for a terminal: one line per case, with a diff for
 // each failure.
-func Report(w *strings.Builder, scriptName string, results []Result) (passed, failed int) {
+//
+// full turns off the length limit on the strings it prints. Running everything
+// wants short lines -- an untruncated failure in one script pushes the others
+// off the screen. Having narrowed to one case with -only, the opposite is true:
+// the whole point is to read the value, and a class declaration or a long SQL
+// statement is well past the limit.
+func Report(w *strings.Builder, results []Result, full bool) (passed, failed int) {
 	for _, r := range results {
 		if r.Pass {
 			passed++
@@ -94,15 +100,15 @@ func Report(w *strings.Builder, scriptName string, results []Result) (passed, fa
 		}
 		failed++
 		fmt.Fprintf(w, "  FAIL  %s\n", r.Case.Name)
-		fmt.Fprintf(w, "        input    %s\n", visible(r.Case.In))
+		fmt.Fprintf(w, "        input    %s\n", visible(r.Case.In, full))
 		switch {
 		case r.Case.Error:
-			fmt.Fprintf(w, "        expected an error, got %s\n", visible(r.Got))
+			fmt.Fprintf(w, "        expected an error, got %s\n", visible(r.Got, full))
 		case r.Err != nil:
 			fmt.Fprintf(w, "        error    %v\n", r.Err)
 		default:
-			fmt.Fprintf(w, "        expected %s\n", visible(r.Case.Out))
-			fmt.Fprintf(w, "        got      %s\n", visible(r.Got))
+			fmt.Fprintf(w, "        expected %s\n", visible(r.Case.Out, full))
+			fmt.Fprintf(w, "        got      %s\n", visible(r.Got, full))
 		}
 	}
 	return passed, failed
@@ -110,10 +116,10 @@ func Report(w *strings.Builder, scriptName string, results []Result) (passed, fa
 
 // visible makes whitespace differences legible -- the usual reason two strings
 // look identical in a terminal but are not equal.
-func visible(s string) string {
+func visible(s string, full bool) string {
 	r := strings.NewReplacer("\n", "\\n", "\t", "\\t", "\r", "\\r")
 	out := r.Replace(s)
-	if len(out) > 200 {
+	if !full && len(out) > 200 {
 		out = out[:200] + "..."
 	}
 	return `"` + out + `"`

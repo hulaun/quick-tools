@@ -1,1 +1,0 @@
-Server=localhost;Port=5432;Database=app;User Id=dev;Password=changeme;

@@ -1,10 +1,11 @@
 // JavaScript object literal  ->  JSON
 //
-// THIS ONE IS YOURS TO WRITE. Fixtures are in js-object-to-json.test.json and
-// the rules are in README.md.
+// YOURS TO WRITE.  Difficulty: 6 of 7.
 //
-// This is the easier of the two parsers and a good one to do first: the input
-// is already very close to JSON. What it adds is:
+// Fixtures are in js-object-to-json.test.json and the rules are in README.md.
+//
+// This is the first of the two real parsers, and the easier one: the input is
+// already very close to JSON. What it adds is:
 //
 //     unquoted keys        { a: 1 }
 //     single quotes        { a: 'x' }

@@ -51,6 +51,12 @@ type Store struct {
 	mu   sync.Mutex
 	dir  string
 	seen map[string]stamp
+
+	// seenDirs tracks folders as well as files, so that creating an empty folder
+	// counts as a change. Without it a new folder would be invisible until the
+	// first note was put in it, which looks exactly like the create having
+	// failed.
+	seenDirs map[string]bool
 }
 
 type stamp struct {
@@ -59,7 +65,7 @@ type stamp struct {
 }
 
 func NewStore(dir string) *Store {
-	return &Store{dir: dir, seen: make(map[string]stamp)}
+	return &Store{dir: dir, seen: make(map[string]stamp), seenDirs: make(map[string]bool)}
 }
 
 // Dir is the folder being watched.
@@ -70,11 +76,11 @@ func (s *Store) Changed() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	found, err := s.walk()
+	found, dirs, err := s.walk()
 	if err != nil {
-		return len(s.seen) > 0
+		return len(s.seen) > 0 || len(s.seenDirs) > 0
 	}
-	if len(found) != len(s.seen) {
+	if len(found) != len(s.seen) || len(dirs) != len(s.seenDirs) {
 		return true
 	}
 	for path, st := range found {
@@ -83,7 +89,37 @@ func (s *Store) Changed() bool {
 			return true
 		}
 	}
+	for path := range dirs {
+		if !s.seenDirs[path] {
+			return true
+		}
+	}
 	return false
+}
+
+// Folders returns every folder under the root, slash-separated and relative,
+// sorted so that a parent comes before its children.
+//
+// Folders are listed separately from snippets because an empty one still has
+// to be selectable: it is where the next note gets created.
+func (s *Store) Folders() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	_, dirs, err := s.walk()
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(dirs))
+	for path := range dirs {
+		rel, err := filepath.Rel(s.dir, path)
+		if err != nil {
+			continue
+		}
+		out = append(out, filepath.ToSlash(rel))
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Load returns every snippet, sorted by folder then name so the palette order
@@ -92,12 +128,14 @@ func (s *Store) Load() []Snippet {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	found, err := s.walk()
+	found, dirs, err := s.walk()
 	if err != nil {
 		s.seen = map[string]stamp{}
+		s.seenDirs = map[string]bool{}
 		return nil
 	}
 	s.seen = found
+	s.seenDirs = dirs
 
 	out := make([]Snippet, 0, len(found))
 	for path, st := range found {
@@ -144,13 +182,14 @@ func (sn Snippet) Text() (string, error) {
 	return strings.TrimRight(string(data), "\r\n"), nil
 }
 
-// walk collects every readable text file under the root.
-func (s *Store) walk() (map[string]stamp, error) {
+// walk collects every readable text file under the root, and every folder.
+func (s *Store) walk() (map[string]stamp, map[string]bool, error) {
 	if _, err := os.Stat(s.dir); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	out := make(map[string]stamp)
+	dirs := make(map[string]bool)
 	err := filepath.WalkDir(s.dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// One unreadable directory should not abandon the whole tree.
@@ -160,6 +199,9 @@ func (s *Store) walk() (map[string]stamp, error) {
 			// Skip the places tooling puts things nobody wants in a palette.
 			if name := d.Name(); path != s.dir && (name == ".git" || strings.HasPrefix(name, ".")) {
 				return filepath.SkipDir
+			}
+			if path != s.dir {
+				dirs[path] = true
 			}
 			return nil
 		}
@@ -174,9 +216,9 @@ func (s *Store) walk() (map[string]stamp, error) {
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return out, nil
+	return out, dirs, nil
 }
 
 // LooksBinary reports whether content is not usable as pasteable text.

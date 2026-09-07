@@ -1,0 +1,5 @@
+Notes are ordinary text files. The folder they are in becomes the group shown
+in the list, so this one appears as "work: example-note".
+
+Enter copies the note to the clipboard and closes the palette -- Win+V with
+folders and an editor.

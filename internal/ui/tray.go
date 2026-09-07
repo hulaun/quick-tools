@@ -81,6 +81,36 @@ func (t *tray) add(hwnd win.HWND, tip string) error {
 	return nil
 }
 
+// setTip changes the icon's tooltip.
+//
+// It is the only chrome the app has while the palette is hidden, which is
+// exactly the state a recording happens in: the window is out of the way so
+// that the keys reach the application being recorded, and the tray is the one
+// place left to say that something is going on.
+func (t *tray) setTip(hwnd win.HWND, tip string) {
+	if !t.added {
+		return
+	}
+	nid := win.NOTIFYICONDATA{HWnd: hwnd, UID: trayIconID, UFlags: co.NIF_TIP}
+	nid.SetCbSize()
+	nid.SetSzTip(tip)
+	win.Shell_NotifyIcon(co.NIM_MODIFY, &nid)
+}
+
+// notify shows a balloon. Used once: to say that recording has started, since
+// the palette has just vanished and without this the app would look as though
+// it had simply closed.
+func (t *tray) notify(hwnd win.HWND, title, text string) {
+	if !t.added {
+		return
+	}
+	nid := win.NOTIFYICONDATA{HWnd: hwnd, UID: trayIconID, UFlags: co.NIF_INFO}
+	nid.SetCbSize()
+	nid.SetSzInfoTitle(title)
+	nid.SetSzInfo(text)
+	win.Shell_NotifyIcon(co.NIM_MODIFY, &nid)
+}
+
 // remove takes the icon away. Skipping this leaves a ghost icon in the tray
 // until the user hovers over it, which looks like the app failed to exit.
 func (t *tray) remove(hwnd win.HWND) {

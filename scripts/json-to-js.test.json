@@ -1,0 +1,87 @@
+[
+  {
+    "name": "keys lose their quotes",
+    "in": "{\"a\": 1, \"b\": \"two\"}",
+    "out": "{\n  a: 1,\n  b: 'two'\n}"
+  },
+  {
+    "name": "a key that is not an identifier keeps them",
+    "in": "{\"my-key\": 1, \"2fer\": 2, \"has space\": 3, \"\": 4}",
+    "out": "{\n  'my-key': 1,\n  '2fer': 2,\n  'has space': 3,\n  '': 4\n}"
+  },
+  {
+    "name": "dollar and underscore are identifier characters",
+    "in": "{\"$ok\": 1, \"_ok\": 2, \"o_k9\": 3}",
+    "out": "{\n  $ok: 1,\n  _ok: 2,\n  o_k9: 3\n}"
+  },
+  {
+    "name": "a reserved word is a legal key and stays unquoted",
+    "in": "{\"if\": 1, \"class\": 2}",
+    "out": "{\n  if: 1,\n  class: 2\n}"
+  },
+  {
+    "name": "nesting, two spaces per level",
+    "in": "{\"u\": {\"name\": \"jo\", \"tags\": [\"a\", \"b\"]}}",
+    "out": "{\n  u: {\n    name: 'jo',\n    tags: [\n      'a',\n      'b'\n    ]\n  }\n}"
+  },
+  {
+    "name": "empty object and empty array stay on one line",
+    "in": "{\"o\": {}, \"a\": []}",
+    "out": "{\n  o: {},\n  a: []\n}"
+  },
+  {
+    "name": "null and booleans",
+    "in": "{\"a\": null, \"b\": true, \"c\": false}",
+    "out": "{\n  a: null,\n  b: true,\n  c: false\n}"
+  },
+  {
+    "name": "an apostrophe is escaped, a double quote is not",
+    "in": "{\"s\": \"it's \\\"here\\\"\"}",
+    "out": "{\n  s: 'it\\'s \"here\"'\n}"
+  },
+  {
+    "name": "escape sequences survive",
+    "in": "{\"s\": \"a\\nb\\tc\\\\d\"}",
+    "out": "{\n  s: 'a\\nb\\tc\\\\d'\n}"
+  },
+  {
+    "name": "numbers are written exactly as they appear",
+    "in": "{\"id\": 9007199254740993, \"n\": 1.50, \"e\": 1e3, \"neg\": -0.0}",
+    "out": "{\n  id: 9007199254740993,\n  n: 1.50,\n  e: 1e3,\n  neg: -0.0\n}"
+  },
+  {
+    "name": "top level array",
+    "in": "[1, \"a\", {\"b\": 2}]",
+    "out": "[\n  1,\n  'a',\n  {\n    b: 2\n  }\n]"
+  },
+  {
+    "name": "top level scalar",
+    "in": "\"hi\"",
+    "out": "'hi'"
+  },
+  {
+    "name": "whitespace in the input does not reach the output",
+    "in": "{\n\n   \"a\"   :    1\n}",
+    "out": "{\n  a: 1\n}"
+  },
+  {
+    "name": "rejects input that is already a js literal, not json",
+    "in": "{a: 1}",
+    "error": true
+  },
+  {
+    "name": "rejects a trailing comma",
+    "in": "{\"a\": 1,}",
+    "error": true
+  },
+  {
+    "name": "rejects trailing junk after the value",
+    "in": "{\"a\": 1} oops",
+    "error": true
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
+    "error": true
+  }
+]

@@ -56,13 +56,7 @@ func keyIsDown(vk uint16) bool {
 // entirely -- or nothing. So we lift every modifier we find held, then press a
 // clean Ctrl+V.
 func SendPaste() {
-	var release []keyInput
-	for _, vk := range []uint16{VKControl, VKMenu, VKShift, VKLWin, VKRWin} {
-		if keyIsDown(vk) {
-			release = append(release, keyEvent(vk, true))
-		}
-	}
-	sendInputs(release)
+	releaseHeldModifiers()
 
 	// Give the target a moment to process the key-ups before the paste, or fast
 	// applications can still see the modifiers as held.

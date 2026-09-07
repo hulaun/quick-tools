@@ -1,0 +1,102 @@
+[
+  {
+    "name": "simple pairs",
+    "in": "{\"a\": 1, \"b\": \"two\"}",
+    "out": "a=1&b=two"
+  },
+  {
+    "name": "key order is the order in the input",
+    "in": "{\"z\": 1, \"a\": 2}",
+    "out": "z=1&a=2"
+  },
+  {
+    "name": "space is percent encoded, not a plus",
+    "in": "{\"q\": \"hello world\"}",
+    "out": "q=hello%20world"
+  },
+  {
+    "name": "reserved characters are encoded in keys and values",
+    "in": "{\"a=b\": \"=&?#\"}",
+    "out": "a%3Db=%3D%26%3F%23"
+  },
+  {
+    "name": "unicode",
+    "in": "{\"q\": \"café\"}",
+    "out": "q=caf%C3%A9"
+  },
+  {
+    "name": "array of scalars repeats the key",
+    "in": "{\"tag\": [\"a\", \"b\"]}",
+    "out": "tag=a&tag=b"
+  },
+  {
+    "name": "nested object uses bracket keys",
+    "in": "{\"u\": {\"name\": \"jo\", \"age\": 3}}",
+    "out": "u[name]=jo&u[age]=3"
+  },
+  {
+    "name": "brackets are not escaped",
+    "in": "{\"u\": {\"a\": 1}}",
+    "out": "u[a]=1"
+  },
+  {
+    "name": "deep nesting",
+    "in": "{\"u\": {\"addr\": {\"city\": \"hanoi\"}}}",
+    "out": "u[addr][city]=hanoi"
+  },
+  {
+    "name": "array of objects uses indices",
+    "in": "{\"a\": [{\"x\": 1}, {\"x\": 2}]}",
+    "out": "a[0][x]=1&a[1][x]=2"
+  },
+  {
+    "name": "array of arrays uses indices too",
+    "in": "{\"a\": [[1, 2]]}",
+    "out": "a[0]=1&a[0]=2"
+  },
+  {
+    "name": "null becomes an empty value",
+    "in": "{\"a\": null, \"b\": 1}",
+    "out": "a=&b=1"
+  },
+  {
+    "name": "empty string becomes an empty value",
+    "in": "{\"a\": \"\"}",
+    "out": "a="
+  },
+  {
+    "name": "booleans spell themselves out",
+    "in": "{\"ok\": true, \"no\": false}",
+    "out": "ok=true&no=false"
+  },
+  {
+    "name": "numbers are written exactly as they appear",
+    "in": "{\"id\": 9007199254740993, \"n\": 1.50}",
+    "out": "id=9007199254740993&n=1.50"
+  },
+  {
+    "name": "empty array and empty object contribute nothing",
+    "in": "{\"a\": [], \"o\": {}, \"b\": 1}",
+    "out": "b=1"
+  },
+  {
+    "name": "rejects an array at the top level",
+    "in": "[1, 2]",
+    "error": true
+  },
+  {
+    "name": "rejects a scalar at the top level",
+    "in": "\"hello\"",
+    "error": true
+  },
+  {
+    "name": "rejects an empty object",
+    "in": "{}",
+    "error": true
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
+    "error": true
+  }
+]

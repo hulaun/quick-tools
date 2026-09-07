@@ -1,77 +1,112 @@
 [
   {
-    "name": "lombok style",
-    "in": "Person(name=John, age=30)",
-    "out": "{\n  \"name\": \"John\",\n  \"age\": 30\n}"
+    "name": "the class from the readme",
+    "in": "public class SysMenu {\n    private static final long serialVersionUID = 1L;\n\n    /** Menu ID */\n    private Long menuId;\n\n    /** Menu name */\n    private String menuName;\n\n    /** Parent menu name */\n    private String parentName;\n\n    /** Parent menu ID */\n    private Long parentId;\n\n    /** display order */\n    private String orderNum;\n\n    /** Routing address */\n    private String path;\n}",
+    "out": "{\n  \"menuId\": \"\",\n  \"menuName\": \"\",\n  \"parentName\": \"\",\n  \"parentId\": \"\",\n  \"orderNum\": \"\",\n  \"path\": \"\"\n}"
   },
   {
-    "name": "ide style",
-    "in": "Person{name='John', age=30}",
-    "out": "{\n  \"name\": \"John\",\n  \"age\": 30\n}"
+    "name": "bare fields with no class around them",
+    "in": "private Long id;\nprivate String name;",
+    "out": "{\n  \"id\": \"\",\n  \"name\": \"\"\n}"
   },
   {
-    "name": "empty object",
-    "in": "Person()",
-    "out": "{}"
+    "name": "declaration order is kept, not sorted",
+    "in": "private String zebra;\nprivate String apple;",
+    "out": "{\n  \"zebra\": \"\",\n  \"apple\": \"\"\n}"
   },
   {
-    "name": "null and booleans",
-    "in": "P(note=null, ok=true, no=false)",
-    "out": "{\n  \"note\": null,\n  \"ok\": true,\n  \"no\": false\n}"
+    "name": "static members are skipped",
+    "in": "public class C {\n    public static final String KIND = \"menu\";\n    private static int counter;\n    private int a;\n}",
+    "out": "{\n  \"a\": \"\"\n}"
   },
   {
-    "name": "numbers",
-    "in": "P(x=-1.5, y=0)",
-    "out": "{\n  \"x\": -1.5,\n  \"y\": 0\n}"
+    "name": "a keyword is a token, not a substring of a field name",
+    "in": "private int staticCount;\nprivate String className;\nprivate String constantValue;\nprivate String returnCode;\nprivate String thisOne;\nprivate String packageName;",
+    "out": "{\n  \"staticCount\": \"\",\n  \"className\": \"\",\n  \"constantValue\": \"\",\n  \"returnCode\": \"\",\n  \"thisOne\": \"\",\n  \"packageName\": \"\"\n}"
   },
   {
-    "name": "not quite a number stays a string",
-    "in": "P(v=12abc)",
-    "out": "{\n  \"v\": \"12abc\"\n}"
+    "name": "methods and their bodies are skipped",
+    "in": "public class C {\n    private String name;\n\n    public String getName() {\n        return name;\n    }\n\n    public void setName(String name) {\n        this.name = name;\n    }\n}",
+    "out": "{\n  \"name\": \"\"\n}"
   },
   {
-    "name": "nested object",
-    "in": "Outer(inner=Inner(x=1))",
-    "out": "{\n  \"inner\": {\n    \"x\": 1\n  }\n}"
+    "name": "an assignment in a method body is not a field",
+    "in": "public class C {\n    private int count;\n\n    public void inc() {\n        count = count + 1;\n        if (count == 3) {\n            count = 0;\n        }\n    }\n}",
+    "out": "{\n  \"count\": \"\"\n}"
   },
   {
-    "name": "deeply nested",
-    "in": "A(b=B(c=C(d=1)))",
-    "out": "{\n  \"b\": {\n    \"c\": {\n      \"d\": 1\n    }\n  }\n}"
+    "name": "an interface method is skipped even though it ends in a semicolon",
+    "in": "public interface C {\n    String getName();\n    void setName(String name);\n}",
+    "error": true
   },
   {
-    "name": "list of scalars",
-    "in": "P(tags=[a, b])",
-    "out": "{\n  \"tags\": [\n    \"a\",\n    \"b\"\n  ]\n}"
+    "name": "generic type containing a comma",
+    "in": "private Map<String, Long> attrs;\nprivate List<String> roles;\nprivate Map<String, List<Long>> deep;",
+    "out": "{\n  \"attrs\": \"\",\n  \"roles\": \"\",\n  \"deep\": \"\"\n}"
   },
   {
-    "name": "empty list",
-    "in": "P(tags=[])",
-    "out": "{\n  \"tags\": []\n}"
+    "name": "several names in one declaration",
+    "in": "private String first, last;",
+    "out": "{\n  \"first\": \"\",\n  \"last\": \"\"\n}"
   },
   {
-    "name": "list of objects",
-    "in": "Outer(list=[A(y=2), A(y=3)])",
-    "out": "{\n  \"list\": [\n    {\n      \"y\": 2\n    },\n    {\n      \"y\": 3\n    }\n  ]\n}"
+    "name": "initialisers are dropped, semicolons inside strings are not separators",
+    "in": "private String sep = \"a; b\";\nprivate int n = 0;\nprivate int[] pair = {1, 2};\nprivate String csv = \"x,y\";",
+    "out": "{\n  \"sep\": \"\",\n  \"n\": \"\",\n  \"pair\": \"\",\n  \"csv\": \"\"\n}"
   },
   {
-    "name": "map value",
-    "in": "P(m={a=1, b=2})",
-    "out": "{\n  \"m\": {\n    \"a\": 1,\n    \"b\": 2\n  }\n}"
+    "name": "several names with initialisers",
+    "in": "private int a = 1, b = 2;",
+    "out": "{\n  \"a\": \"\",\n  \"b\": \"\"\n}"
   },
   {
-    "name": "quoted value containing a comma and an equals",
-    "in": "P(a='x, y=z', b=1)",
-    "out": "{\n  \"a\": \"x, y=z\",\n  \"b\": 1\n}"
+    "name": "annotations are not method signatures",
+    "in": "@Data\npublic class C {\n    @TableId(value = \"menu_id\")\n    private Long menuId;\n\n    @JsonProperty(\"nm\") private String name;\n}",
+    "out": "{\n  \"menuId\": \"\",\n  \"name\": \"\"\n}"
   },
   {
-    "name": "bare value containing a comma",
-    "in": "P(note=hello, world, age=null)",
-    "out": "{\n  \"note\": \"hello, world\",\n  \"age\": null\n}"
+    "name": "array types in both positions",
+    "in": "private String[] tags;\nprivate int counts[];",
+    "out": "{\n  \"tags\": \"\",\n  \"counts\": \"\"\n}"
   },
   {
-    "name": "rejects text that is not an object",
+    "name": "comments never contribute a field",
+    "in": "public class C {\n    // private String ignored;\n    /* private String alsoIgnored; */\n    private String kept; // trailing note\n}",
+    "out": "{\n  \"kept\": \"\"\n}"
+  },
+  {
+    "name": "every access modifier, including none",
+    "in": "class C {\n    String bare;\n    protected int p;\n    public long q;\n    private transient String r;\n}",
+    "out": "{\n  \"bare\": \"\",\n  \"p\": \"\",\n  \"q\": \"\",\n  \"r\": \"\"\n}"
+  },
+  {
+    "name": "the whole file, package and imports included",
+    "in": "package com.example.domain;\n\nimport java.util.List;\nimport static java.util.Objects.requireNonNull;\n\npublic class C {\n    private String a;\n}",
+    "out": "{\n  \"a\": \"\"\n}"
+  },
+  {
+    "name": "field on the same line as the class brace",
+    "in": "public class C { private String a; }",
+    "out": "{\n  \"a\": \"\"\n}"
+  },
+  {
+    "name": "a blank line of spaces contributes nothing",
+    "in": "private String a;\n   \nprivate String b;",
+    "out": "{\n  \"a\": \"\",\n  \"b\": \"\"\n}"
+  },
+  {
+    "name": "rejects a class with no fields",
+    "in": "public class C {\n}",
+    "error": true
+  },
+  {
+    "name": "rejects text that is not a class",
     "in": "just some text",
+    "error": true
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
     "error": true
   }
 ]

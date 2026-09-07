@@ -80,3 +80,37 @@ func ids(items []Item) string {
 	}
 	return s
 }
+
+func TestNameMatchesOutrankContextMatches(t *testing.T) {
+	// The shape that made the notes list look broken: a folder whose whole
+	// context is one short word, and the notes inside it whose names are what
+	// the user is actually typing.
+	ix := New([]Item{
+		{ID: "notebooks", Name: "notebooks", Group: "", Tags: []string{"notebooks"}},
+		{ID: "notebooks/todo.txt", Name: "todo", Group: "notebooks", Tags: []string{"notebooks/todo.txt"}},
+	})
+	// Both match: the folder on its name, the note on its context. The folder's
+	// haystack is far shorter, which is exactly the case where one combined
+	// haystack used to bury the note.
+	got := ids(ix.Search("noteb"))
+	if got != "notebooks,notebooks/todo.txt" {
+		t.Errorf("Search(noteb) = %q", got)
+	}
+	// And a name match beats a context match regardless of length.
+	if got := ids(ix.Search("todo")); got != "notebooks/todo.txt" {
+		t.Errorf("Search(todo) = %q, want the note itself", got)
+	}
+}
+
+func TestContextStillMatchesWhenTheNameDoesNot(t *testing.T) {
+	ix := New([]Item{
+		{ID: "work/vpn.conf", Name: "vpn", Group: "work", Tags: []string{"work/vpn.conf"}},
+	})
+	if got := ids(ix.Search("work")); got != "work/vpn.conf" {
+		t.Errorf("Search(work) = %q, want the note found by its folder", got)
+	}
+	// And by a path fragment spanning both.
+	if got := ids(ix.Search("work/vpn")); got != "work/vpn.conf" {
+		t.Errorf("Search(work/vpn) = %q", got)
+	}
+}

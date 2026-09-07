@@ -1,0 +1,82 @@
+[
+  {
+    "name": "plain object gets the placeholder table",
+    "in": "{\"menuId\": 1, \"menuName\": \"Home\"}",
+    "out": "INSERT INTO table_name (menu_id, menu_name) VALUES (1, 'Home');"
+  },
+  {
+    "name": "a single wrapping object names the table",
+    "in": "{\"sysMenu\": {\"menuId\": 1, \"path\": \"/home\"}}",
+    "out": "INSERT INTO sys_menu (menu_id, path) VALUES (1, '/home');"
+  },
+  {
+    "name": "a single scalar key is a row, not a table name",
+    "in": "{\"a\": 1}",
+    "out": "INSERT INTO table_name (a) VALUES (1);"
+  },
+  {
+    "name": "column order is the order in the input",
+    "in": "{\"z\": 1, \"a\": 2}",
+    "out": "INSERT INTO table_name (z, a) VALUES (1, 2);"
+  },
+  {
+    "name": "a quote in a string is doubled",
+    "in": "{\"name\": \"O'Brien\"}",
+    "out": "INSERT INTO table_name (name) VALUES ('O''Brien');"
+  },
+  {
+    "name": "a backslash is not an escape character",
+    "in": "{\"p\": \"C:\\\\temp\"}",
+    "out": "INSERT INTO table_name (p) VALUES ('C:\\temp');"
+  },
+  {
+    "name": "null and booleans are keywords, not strings",
+    "in": "{\"a\": null, \"ok\": true, \"no\": false}",
+    "out": "INSERT INTO table_name (a, ok, no) VALUES (NULL, TRUE, FALSE);"
+  },
+  {
+    "name": "numbers are written exactly as they appear",
+    "in": "{\"id\": 9007199254740993, \"n\": 1.50}",
+    "out": "INSERT INTO table_name (id, n) VALUES (9007199254740993, 1.50);"
+  },
+  {
+    "name": "a nested value becomes compact json in a string",
+    "in": "{\"id\": 1, \"meta\": {\"a\": 1, \"b\": [2, 3]}}",
+    "out": "INSERT INTO table_name (id, meta) VALUES (1, '{\"a\":1,\"b\":[2,3]}');"
+  },
+  {
+    "name": "an already snake_case key is left alone",
+    "in": "{\"menu_id\": 1, \"created_at\": \"2026-01-01\"}",
+    "out": "INSERT INTO table_name (menu_id, created_at) VALUES (1, '2026-01-01');"
+  },
+  {
+    "name": "a run of capitals is one word",
+    "in": "{\"userID\": 1, \"HTTPStatus\": 200}",
+    "out": "INSERT INTO table_name (user_id, http_status) VALUES (1, 200);"
+  },
+  {
+    "name": "digits do not start a new word",
+    "in": "{\"addr2\": \"x\", \"line1Text\": \"y\"}",
+    "out": "INSERT INTO table_name (addr2, line1_text) VALUES ('x', 'y');"
+  },
+  {
+    "name": "rejects an array, because a batch is not one row",
+    "in": "[{\"a\": 1}, {\"a\": 2}]",
+    "error": true
+  },
+  {
+    "name": "rejects an empty object",
+    "in": "{}",
+    "error": true
+  },
+  {
+    "name": "rejects a scalar",
+    "in": "\"hello\"",
+    "error": true
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
+    "error": true
+  }
+]

@@ -48,9 +48,16 @@ func (p *Palette) reloadScripts() {
 	p.rebuildIndex()
 
 	// If the palette is open while a script is saved, refresh what is on screen
-	// so the edit is visible without closing and reopening.
-	if p.shown {
-		p.refilter()
+	// so the edit is visible without closing and reopening -- staying on the row
+	// that was highlighted.
+	//
+	// Only when that is the list actually on screen. The watcher reloads both
+	// sources together, and saving a note is itself a change, so a refilter here
+	// would rebuild the notes list one second after every Ctrl+S and drop the
+	// selection back to the first row -- with reloadNotes then faithfully
+	// preserving the wrong row.
+	if p.shown && p.mode == modeTransforms {
+		p.refilterKeeping(p.currentID())
 	}
 }
 
@@ -62,7 +69,13 @@ func (p *Palette) reloadScripts() {
 func (p *Palette) watchSources(hwnd win.HWND) {
 	go func() {
 		for range time.Tick(scriptPollInterval) {
-			if p.loader.Changed() || p.snippets.Changed() {
+			// Every source is asked, and none short-circuits: || would stop at the
+			// first one that changed and leave the others' timestamps unread, so
+			// the next tick would report them as changed all over again.
+			scripts, notes := p.loader.Changed(), p.snippets.Changed()
+			places, requests := p.places.Changed(), p.requestsChanged()
+			macros, env := p.macros.Changed(), p.envChanged()
+			if scripts || notes || places || macros || requests || env {
 				hwnd.PostMessage(wmSourcesChanged, 0, 0)
 			}
 		}

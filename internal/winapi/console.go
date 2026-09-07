@@ -11,12 +11,15 @@ var (
 	procAttachConsole = kernel32.NewProc("AttachConsole")
 	procAllocConsole  = kernel32.NewProc("AllocConsole")
 	procGetStdHandle  = kernel32.NewProc("GetStdHandle")
+	procGetFileType   = kernel32.NewProc("GetFileType")
 )
 
 const (
 	attachParentProcess = ^uintptr(0)  // (DWORD)-1
 	stdOutputHandle     = ^uintptr(10) // (DWORD)-11
 	stdErrorHandle      = ^uintptr(11) // (DWORD)-12
+
+	fileTypeUnknown = 0
 )
 
 // AttachConsole reconnects stdout and stderr to the terminal that launched us.
@@ -33,6 +36,16 @@ const (
 // Returns false if no console could be obtained, in which case printing is
 // pointless and the caller may prefer a message box.
 func AttachConsole() bool {
+	// A terminal that is not a console -- mintty, which is what Git Bash uses --
+	// hands the child an inherited *pipe* for stdout and has no console for
+	// AttachConsole to find. Allocating one then throws that working pipe away
+	// and prints into a window that vanishes when the process exits, which looks
+	// exactly like the command having done nothing. So if the handles Go bound at
+	// startup are already usable, leave them alone.
+	if stdHandlesUsable() {
+		return true
+	}
+
 	attached := false
 	if r, _, _ := procAttachConsole.Call(attachParentProcess); r != 0 {
 		attached = true
@@ -52,4 +65,16 @@ func AttachConsole() bool {
 		os.Stderr = os.NewFile(uintptr(syscall.Handle(h)), "/dev/stderr")
 	}
 	return true
+}
+
+// stdHandlesUsable reports whether stdout already goes somewhere -- a pipe, a
+// file or a console. GetFileType is the test: a GUI process with no console
+// gets a null or invalid handle, which comes back FILE_TYPE_UNKNOWN.
+func stdHandlesUsable() bool {
+	h, _, _ := procGetStdHandle.Call(stdOutputHandle)
+	if h == 0 || h == uintptr(syscall.InvalidHandle) {
+		return false
+	}
+	t, _, _ := procGetFileType.Call(h)
+	return t != fileTypeUnknown
 }

@@ -1,6 +1,9 @@
 // URL query string  ->  JSON
 //
-// YOURS TO WRITE.  Difficulty: 2 of 4.
+// YOURS TO WRITE.  Difficulty: 2 of 7.
+//
+// json-to-query-string.js is the other direction. Doing them as a pair is
+// worth it: each one's fixtures are the other one's output.
 //
 //     https://api.example.com/users?page=2&tag=a&tag=b
 //

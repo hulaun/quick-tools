@@ -3,9 +3,11 @@
     Builds quick-tools.
 
 .DESCRIPTION
-    Produces quicktools.exe in the repository root, beside scripts/ and
-    snippets/ -- the same layout a release ships in. Building into a subfolder
-    would make the app read a different copy of scripts/ than the one you edit.
+    Produces bin/quicktools.exe. Relative paths in config.json resolve against
+    the folder holding the exe, except that a bin folder is stepped out of (see
+    config.Root) -- so the binary sits in bin/ while storage/ and scripts/ stay
+    at the root, which is both the development layout and the layout a release
+    ships in.
 
 .PARAMETER Dev
     Build with a console attached, so panics and log output are visible.
@@ -44,13 +46,15 @@ Write-Host "test..."
 go test ./...
 
 Write-Host "build..."
+$out = "bin\quicktools.exe"
+if (-not (Test-Path "bin")) { New-Item -ItemType Directory "bin" | Out-Null }
 if ($Dev) {
-    go build -o quicktools.exe ./cmd/quicktools
-    Write-Host "built quicktools.exe (dev: console attached)"
+    go build -o $out ./cmd/quicktools
+    Write-Host "built $out (dev: console attached)"
 } else {
-    go build -trimpath -ldflags "-H windowsgui -s -w" -o quicktools.exe ./cmd/quicktools
-    Write-Host "built quicktools.exe (release: no console)"
+    go build -trimpath -ldflags "-H windowsgui -s -w" -o $out ./cmd/quicktools
+    Write-Host "built $out (release: no console)"
 }
 
-$size = (Get-Item quicktools.exe).Length / 1MB
+$size = (Get-Item $out).Length / 1MB
 Write-Host ("size: {0:N1} MB" -f $size)

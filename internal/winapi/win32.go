@@ -14,8 +14,6 @@ var (
 
 	procRegisterHotKey    = user32.NewProc("RegisterHotKey")
 	procUnregisterHotKey  = user32.NewProc("UnregisterHotKey")
-	procGetMessageW       = user32.NewProc("GetMessageW")
-	procPostQuitMessage   = user32.NewProc("PostQuitMessage")
 	procGetForegroundWin  = user32.NewProc("GetForegroundWindow")
 	procSetForegroundWin  = user32.NewProc("SetForegroundWindow")
 	procAttachThreadInput = user32.NewProc("AttachThreadInput")
@@ -54,6 +52,7 @@ const (
 	VKLWin    = 0x5B
 	VKRWin    = 0x5C
 	VKV       = 0x56
+	VKZ       = 0x5A
 )
 
 const (
@@ -63,19 +62,6 @@ const (
 	inputKeyboard  = 1
 	keyeventfKeyUp = 0x0002
 )
-
-// msg mirrors the Win32 MSG structure.
-type msg struct {
-	hwnd     uintptr
-	message  uint32
-	wParam   uintptr
-	lParam   uintptr
-	time     uint32
-	pt       point
-	lPrivate uint32
-}
-
-type point struct{ x, y int32 }
 
 // currentThreadID returns the calling thread's Win32 thread id.
 func currentThreadID() uint32 {

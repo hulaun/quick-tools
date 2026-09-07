@@ -1,7 +1,18 @@
-# Build output. The dev build lives at the repo root so that scripts/ and
-# snippets/ sit beside it, which is exactly the layout a release ships in.
+# Build output. The binary is built into bin/; config.Root steps out of a bin
+# folder, so the app still reads storage/ and scripts/ at the repo root.
 bin/
 *.exe
+
+# Everything the app accumulates: notes, saved requests, named paths and the
+# environments they resolve against. All of it holds credentials, internal
+# hostnames and bearer tokens, which is why it is one ignored folder rather
+# than four scattered entries. storage.example/ is the template and is checked
+# in.
+storage/
+
+# What Go renames the old binary to when it cannot overwrite a running exe.
+# restart.sh deletes it; this is for the times you build by hand.
+*.exe~
 
 # Go
 *.test

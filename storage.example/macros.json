@@ -1,0 +1,61 @@
+[
+  {
+    "_comment": "Copy this file to macros.json. Recording with Alt+D writes entries here for you -- this file exists so the shape is readable, and so a macro can be corrected by hand. JSON has no comments, so the notes live in these _comment keys, which are ignored.",
+    "name": "shown in the list",
+    "group": "optional heading, shown before the name and searchable as context",
+    "steps": [],
+    "undo": 0,
+    "delay": 0
+  },
+
+  {
+    "_comment": "The one this tab was built for: put the caret anywhere on the line, and the third word gets a quote in front of it. Only the last step changes anything, so one Ctrl+Z undoes the whole macro.",
+    "name": "Quote before the third word",
+    "group": "Editing",
+    "steps": [
+      { "key": "Home" },
+      { "key": "Ctrl+Right" },
+      { "key": "Ctrl+Right" },
+      { "key": "Shift+Alt+Right" },
+      { "type": "\"" }
+    ]
+  },
+
+  {
+    "_comment": "Two separate changes, so two undo groups. The palette works that out and turns the first Ctrl+Z after a run into both of them.",
+    "name": "Wrap the line in quotes",
+    "group": "Editing",
+    "steps": [
+      { "key": "Home" },
+      { "type": "\"" },
+      { "key": "End" },
+      { "type": "\"," }
+    ]
+  },
+
+  {
+    "_comment": "delay slows the replay down, in milliseconds per step. Some applications drop synthesised keys that arrive faster than a person could type them; the default is 8ms and nothing needs to set this unless a macro comes out garbled.",
+    "name": "Duplicate the line, slowly",
+    "group": "Editing",
+    "delay": 40,
+    "steps": [
+      { "key": "Home" },
+      { "key": "Shift+Down" },
+      { "key": "Ctrl+C" },
+      { "key": "Ctrl+V" }
+    ]
+  },
+
+  {
+    "_comment": "undo overrides the estimate. What an application groups into one undo is its own decision and cannot be asked for, so when the guess is wrong, write the real number here.",
+    "name": "A macro whose editor undoes differently",
+    "group": "Editing",
+    "undo": 3,
+    "steps": [
+      { "key": "Home" },
+      { "type": "SELECT " },
+      { "key": "End" },
+      { "type": ";" }
+    ]
+  }
+]

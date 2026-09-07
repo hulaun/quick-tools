@@ -1,0 +1,82 @@
+[
+  {
+    "name": "a wrapping object names the table, a trailing _id is the key",
+    "in": "{\"sysMenu\": {\"menuId\": 1, \"menuName\": \"Home\", \"path\": \"/home\"}}",
+    "out": "UPDATE sys_menu SET menu_name = 'Home', path = '/home' WHERE menu_id = 1;"
+  },
+  {
+    "name": "plain object gets the placeholder table",
+    "in": "{\"menuId\": 1, \"path\": \"/home\"}",
+    "out": "UPDATE table_name SET path = '/home' WHERE menu_id = 1;"
+  },
+  {
+    "name": "an exact id beats a trailing _id, wherever it appears",
+    "in": "{\"menuId\": 1, \"id\": 7, \"name\": \"x\"}",
+    "out": "UPDATE table_name SET menu_id = 1, name = 'x' WHERE id = 7;"
+  },
+  {
+    "name": "the first trailing _id wins when there are several",
+    "in": "{\"name\": \"x\", \"menuId\": 1, \"parentId\": 2}",
+    "out": "UPDATE table_name SET name = 'x', parent_id = 2 WHERE menu_id = 1;"
+  },
+  {
+    "name": "with no id at all the first key is the key",
+    "in": "{\"code\": \"A1\", \"name\": \"x\"}",
+    "out": "UPDATE table_name SET name = 'x' WHERE code = 'A1';"
+  },
+  {
+    "name": "set order is the order in the input",
+    "in": "{\"id\": 1, \"z\": 2, \"a\": 3}",
+    "out": "UPDATE table_name SET z = 2, a = 3 WHERE id = 1;"
+  },
+  {
+    "name": "quotes are doubled in the where clause as well as the set",
+    "in": "{\"code\": \"O'B\", \"name\": \"a'b\"}",
+    "out": "UPDATE table_name SET name = 'a''b' WHERE code = 'O''B';"
+  },
+  {
+    "name": "null and booleans are keywords, not strings",
+    "in": "{\"id\": 1, \"note\": null, \"ok\": false}",
+    "out": "UPDATE table_name SET note = NULL, ok = FALSE WHERE id = 1;"
+  },
+  {
+    "name": "numbers are written exactly as they appear",
+    "in": "{\"id\": 9007199254740993, \"n\": 1.50}",
+    "out": "UPDATE table_name SET n = 1.50 WHERE id = 9007199254740993;"
+  },
+  {
+    "name": "a nested value becomes compact json in a string",
+    "in": "{\"id\": 1, \"meta\": {\"a\": 1, \"b\": [2, 3]}}",
+    "out": "UPDATE table_name SET meta = '{\"a\":1,\"b\":[2,3]}' WHERE id = 1;"
+  },
+  {
+    "name": "a run of capitals is one word",
+    "in": "{\"userID\": 1, \"HTTPStatus\": 200}",
+    "out": "UPDATE table_name SET http_status = 200 WHERE user_id = 1;"
+  },
+  {
+    "name": "rejects one key, because nothing is left to set",
+    "in": "{\"id\": 1}",
+    "error": true
+  },
+  {
+    "name": "rejects an array, because a batch is not one row",
+    "in": "[{\"id\": 1, \"a\": 2}]",
+    "error": true
+  },
+  {
+    "name": "rejects an empty object",
+    "in": "{}",
+    "error": true
+  },
+  {
+    "name": "rejects a scalar",
+    "in": "\"hello\"",
+    "error": true
+  },
+  {
+    "name": "rejects empty input",
+    "in": "",
+    "error": true
+  }
+]

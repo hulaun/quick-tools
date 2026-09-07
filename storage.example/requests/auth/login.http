@@ -1,0 +1,10 @@
+# @name Login
+# Directives go above the request line. @timeout is in seconds, and @insecure
+# skips TLS verification -- for an internal server with a self-signed cert.
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{
+  "username": "{{user}}",
+  "password": "{{password}}"
+}
