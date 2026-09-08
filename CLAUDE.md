@@ -112,7 +112,7 @@ Build all the mechanical parts fully — those were never the point.
 | **M4** — packaging | Done. Single instance, autostart, icon, manifest, windowless build. |
 | **M5** — notes | Done. Second tab: editable notes over the same folder tree. |
 | **M6** — places | Done. Third tab: named paths, opened in Explorer, an editor or a terminal. |
-| **M7** — API tab | Done. Fifth tab: saved `.http` requests, environments, send, response, editing, the post-response hook, and copy-as-curl. `ParseCurl` is reserved for the user (see above). The plan is at `~/.claude/plans/m7-api-tab.md`. |
+| **M7** — API tab | Done. Fifth tab: saved `.http` requests, environments, send, response, editing, the post-response hook, and copy-as-curl. Environments were reworked on 2026-09-08 into a global stage over per-project values -- see below. `ParseCurl` is reserved for the user (see above). The plan is at `~/.claude/plans/m7-api-tab.md`. |
 | **M8** — macros | Done. Fourth tab: recorded keystroke sequences, replayed into the previous window. A low-level keyboard hook records, `SendInput` replays, and the first `Ctrl+Z` after a multi-change macro is turned into as many as it needs. |
 
 ### What works today
@@ -234,6 +234,64 @@ Build all the mechanical parts fully — those were never the point.
   Openers are detected at startup and overridable under `openers` in
   config.json. `places.example.json` is the checked-in template; `places.json`
   is personal and gitignored, like `snippets/`.
+- `internal/ui/command.go` -- the search box's memory and its command line.
+  **The query is remembered per tab** and put back, wholly selected, the next
+  time the palette opens on that tab: copying one value out of a config and
+  coming back for the next was costing the same typing twice. Selected rather
+  than merely present is what makes it free -- the list is already filtered to
+  what you were looking at, and the first character typed replaces the lot.
+  **A query beginning with `>`, or `Ctrl+Shift+P`, lists the tabs themselves**
+  and Enter goes to the one highlighted, so the fifth tab is `>api` rather than
+  four presses of the hotkey and a count in your head. It is a *view over the
+  search box*, not a sixth mode: `p.mode` does not change while it is showing,
+  the tab you came from stays lit, and the right-hand pane keeps what it was
+  holding -- nothing is rebuilt or discarded for a prefix that may be gone on
+  the next keystroke. Esc leaves it and restores the query rather than closing
+  the window. Tabs match on tags as well as names, so `>login` finds Notes.
+- **The stage is global and the values are per project.** `Ctrl+E` cycles
+  `local -> sit -> uat -> prod` and means "put the app on UAT", not "switch this
+  one project"; each folder under `storage/requests/` may hold an `env.json`
+  giving its own hosts for those same stage names, and `storage/env.json` is the
+  base layer underneath them all. Resolution walks from the request's own folder
+  up to the storage root, first value found winning, so a project overrides only
+  what differs and a shared value is written once.
+
+  This replaced one flat `env.json` on 2026-09-08. The problem with the flat
+  file was not that the list got long -- it was that the list was a *product*.
+  Four projects times three stages is twelve entries of which only three are
+  states the highlighted request can meaningfully be in, so `Ctrl+E` spent most
+  of its cycle somewhere wrong. Splitting the two axes makes the cycle as long
+  as the stage list and keeps it there whatever the project count, and a new
+  project is a folder with an `env.json` in it rather than a central file to go
+  and edit.
+
+  Two options were considered and rejected, and both are worth not
+  re-litigating. A **sixth list below the requests** would not have fixed the
+  product at all -- the list is still flat, just permanently visible -- and it
+  breaks the rule that every mode is the same three controls. **Environments as
+  rows in the requests list** overloads Enter, which sends on one row and would
+  select on another, and pollutes the fuzzy search with rows nobody was looking
+  for.
+
+  `Alt+E` opens whichever file applies to the highlight -- the nearest
+  `env.json` at or above it, or, for a project that has none yet, the path its
+  own would go at, so the first edit in a new project does not land in the file
+  everybody shares. `Ctrl+Shift+E` still does the same thing. The path is held
+  in `envEditPath` for the length of the edit: moving the highlight while typing
+  must not redirect `Ctrl+S` into another project's file. An `env.json` is
+  filtered out of the requests list, since it lives among the requests but is
+  not one.
+
+  The session overlay a hook writes into is keyed by **project as well as
+  stage**. A token lifted from `gtos` on uat has no business being visible to a
+  `payments` request on uat -- the same argument that already scoped it per
+  stage, one level down.
+
+  The stage being global means it can be pointed at a project that has never
+  heard of it. That is allowed, and the strip says `gtos · uat` or
+  `payments · prod (not set here)` rather than resolving nothing quietly.
+  `internal/api/env.go` is the whole model and has 17 tests of its own in
+  `envtree_test.go`.
 - `internal/ui/chain.go` -- Tab runs the highlighted transform and feeds the
   result back in as the input to the next, so several transforms compose in one
   pass. The chain is a list of `{name, before}`: keeping the input each step was
@@ -382,6 +440,7 @@ internal/winapi/    Win32: hotkey, clipboard, focus, sendinput, DPI, theming;
                     repaint), capture.go (mouse capture)
 internal/transform/ built-in transforms + registry
 internal/ui/        palette.go (window, modes, keys), notes.go (notes mode),
+                    command.go (remembered queries, the ">" tab switcher),
                     macros.go (record, replay, the undo watch),
                     api.go + api_edit.go (API mode), editing.go (word delete),
                     theme.go (colours, fonts, chrome),
@@ -398,9 +457,10 @@ scripts/            user .js transforms -- half checked in, so not under storage
 storage/            everything the user accumulates; gitignored as one unit
   snippets/           the Notes tab
   requests/           the API tab, one .http per file
+    <project>/env.json  that project's values for each stage
   places.json         the Places tab
   macros.json         the Macros tab
-  env.json            the environments requests resolve {{vars}} against
+  env.json            the base layer the project files override
 storage.example/    the checked-in template: cp -r storage.example storage
 restart.sh          quit, rebuild, relaunch detached -- the inner loop
 restart.cmd         the same, through Git Bash, for cmd/PowerShell/Explorer
@@ -1014,6 +1074,22 @@ underneath are being rewritten, the next blink inverts a colour the caret was
 never drawn over and leaves a stray mark that stays there. Hiding it for the
 length of the copy costs nothing: both calls are no-ops unless the window owns
 the caret.
+
+**58. A checked-in template that the loader cannot read.**
+`storage.example/env.json` opened with a `"_comment"` explaining what the file
+was for, and the loader read every top-level key as a stage -- so it tried to
+decode a string as an environment body and failed. `cp -r storage.example
+storage`, which is the documented first step, produced an `env.json` that did
+not parse, and the strip said "env.json is broken" before the user had typed
+anything. Nothing caught it because the tests all built their own fixtures; the
+one file every new user actually starts from was the only one never loaded.
+
+Two fixes, and the second is the one that generalises. Keys beginning with `_`
+are now skipped as comments, the same convention `places.json` already carries
+-- their value is *decoded and dropped* rather than skipped by token, because
+the decoder is a stream and skipping a token would leave it in the middle of a
+value. And there is a test that loads the checked-in template itself. Any file
+shipped as a starting point should have one.
 
 ---
 

@@ -64,6 +64,13 @@ func (p *Palette) reloadRequests() {
 		})
 	}
 	for _, sn := range p.requests.Load() {
+		// A project's env.json lives among the requests it serves, which is what
+		// makes it travel with them -- but it is not one, and listing it would
+		// put a row called "env" in every project and match it on every search
+		// for something else. Alt+E is how it is reached.
+		if path.Base(sn.ID) == api.EnvFileName {
+			continue
+		}
 		rows = append(rows, apiRow{
 			id:     sn.ID,
 			name:   sn.Name,
@@ -94,24 +101,58 @@ func (p *Palette) reloadRequests() {
 	}
 }
 
-// reloadEnv re-reads env.json, carrying the session values across.
+// reloadEnv re-reads the base file and every project env.json, carrying the
+// session values across.
+//
+// The error is recorded rather than returned, and the fresh environment is
+// installed either way: LoadEnvTree skips only the file that does not parse, so
+// keeping the old one would throw away the good projects' values as well as the
+// broken one's. Recorded rather than swallowed, because an environment that
+// silently stopped resolving would look like the substitution being broken.
 func (p *Palette) reloadEnv() {
-	if p.cfg.EnvFile == "" {
+	if p.envPath == "" {
 		return
 	}
-	fresh, err := api.LoadEnv(p.envPath)
-	if err != nil {
-		// Kept rather than swallowed: an environment that silently stopped
-		// resolving would look like the substitution being broken.
-		p.envErr = err
+	fresh, err := api.LoadEnvTree(p.envPath, p.requestsDir())
+	p.envErr = err
+	if fresh == nil {
 		return
 	}
-	p.envErr = nil
 	fresh.Adopt(p.env)
 	p.env = fresh
 	if p.mode == modeAPI {
+		p.syncEnvScope()
 		p.updateStripLabel()
 	}
+}
+
+// requestsDir is the root of the requests tree, or "" when the tab has no
+// store behind it. The project environment files are found by walking it.
+func (p *Palette) requestsDir() string {
+	if p.requests == nil {
+		return ""
+	}
+	return p.requests.Dir()
+}
+
+// syncEnvScope points the environment at the project the highlight is in, so
+// {{base}} means whatever that project's env.json says it means.
+//
+// A folder row scopes to itself: highlighting a project and pressing Alt+E is
+// how its file gets created, and it would be odd for the row named after the
+// project to be resolving against its parent.
+func (p *Palette) syncEnvScope() {
+	if p.env == nil {
+		return
+	}
+	folder := ""
+	if r, ok := p.selectedRequest(); ok {
+		folder = r.folder
+		if r.isDir {
+			folder = r.id
+		}
+	}
+	p.env.SetScope(folder)
 }
 
 // requestsChanged is the watcher's question for the requests tree. It is a
@@ -124,11 +165,12 @@ func (p *Palette) requestsChanged() bool {
 	return p.requests.Changed()
 }
 
-// envChanged reports whether env.json has been written since it was last read.
+// envChanged reports whether the base env.json has been written since it was
+// last read.
 //
-// One file rather than a tree, so a modification time and a size are enough --
-// the whole apparatus snippet.Store needs for a folder would be a lot of
-// machinery for one file. A file that has appeared or vanished counts too:
+// Only the base one. The project files live inside the requests tree, so
+// requestsChanged already sees them -- and every reload runs together, so one
+// source noticing is enough. A file that has appeared or vanished counts too:
 // creating env.json for the first time has to be noticed without a restart.
 func (p *Palette) envChanged() bool {
 	if p.envPath == "" {
@@ -192,6 +234,12 @@ func (p *Palette) showRequest() {
 	if p.envEditing {
 		return
 	}
+
+	// Which project the highlight is in decides what {{base}} resolves to, so
+	// it is settled before anything is read or summarised -- including on the
+	// paths below that return early.
+	p.syncEnvScope()
+	p.updateStripLabel()
 
 	r, ok := p.selectedRequest()
 	if !ok || r.isDir {
@@ -391,12 +439,26 @@ func (p *Palette) cycleEnv() {
 	}
 }
 
-// envName is the active environment, or a stand-in when there is none.
+// envName is what the strip shows: the project whose file is being used and the
+// stage it is on.
+//
+// Both halves, because with one file per project the stage alone does not say
+// whose "uat" this is -- and the project alone does not say which of its four
+// stages is live. A stage the project does not define is called out rather than
+// shown as if it resolved, since the stage is global and can be pointed at a
+// project that has never heard of it.
 func (p *Palette) envName() string {
 	if p.env == nil || p.env.Active() == "" {
 		return "(none)"
 	}
-	return p.env.Active()
+	name := p.env.Active()
+	if proj := p.env.Project(); proj != "" {
+		name = proj + " · " + name
+	}
+	if !p.env.Defined() {
+		name += " (not set here)"
+	}
+	return name
 }
 
 // updateStripLabel fills the strip beside the tabs, which belongs to whichever
@@ -413,7 +475,9 @@ func (p *Palette) updateStripLabel() {
 	case modeAPI:
 		text := "env: " + p.envName()
 		if p.envErr != nil {
-			text = "env.json is broken"
+			// Named, because with one file per project "env.json is broken" no
+			// longer says which one.
+			text = "broken: " + p.envErr.Error()
 		}
 		p.chainLabel.Hwnd().SetWindowText(text)
 	default:

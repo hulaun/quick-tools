@@ -115,7 +115,7 @@ func TestOverlayWinsOverFile(t *testing.T) {
 	if got != "from-the-hook" {
 		t.Errorf("Expand(user) = %q, want the overlay value", got)
 	}
-	if e.file["dev"]["user"] != "admin" {
+	if v, _ := e.fileValue("dev", "user"); v != "admin" {
 		t.Error("Set wrote through to the file layer; it must not")
 	}
 }

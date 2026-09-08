@@ -21,6 +21,9 @@ import (
 type snippetStore interface {
 	Load() []snippet.Snippet
 	Folders() []string
+	// Dir is the root on disk. The API tab needs it to find the per-project
+	// env.json files, which live in the tree rather than beside the exe.
+	Dir() string
 	Changed() bool
 	Save(id, text string) error
 	CreateNote(folder, name string) (snippet.Snippet, error)

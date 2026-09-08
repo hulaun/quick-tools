@@ -40,7 +40,7 @@ func TestHookSetsAVariable(t *testing.T) {
 	// It must land in the session overlay, never in the file layer -- writing
 	// through would rewrite env.json on every send and the watcher would reload
 	// it on every send in turn.
-	if _, onDisk := e.file["dev"]["token"]; onDisk {
+	if _, onDisk := e.fileValue("dev", "token"); onDisk {
 		t.Error("the hook wrote into the file layer; it must only touch the session")
 	}
 }
@@ -137,7 +137,7 @@ func TestHookCanOverwrite(t *testing.T) {
 	if v, _ := e.Lookup("user"); v != "someone-else" {
 		t.Errorf("user = %q", v)
 	}
-	if e.file["dev"]["user"] != "admin" {
+	if v, _ := e.fileValue("dev", "user"); v != "admin" {
 		t.Error("the file layer was modified")
 	}
 }

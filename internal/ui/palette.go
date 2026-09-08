@@ -217,6 +217,12 @@ type Palette struct {
 	mode    int
 	indexes [modeCount]*fuzzy.Index
 
+	// commands is the list of tabs, searched instead of indexes[mode] while the
+	// query begins with ">". queries is the last query typed against each tab,
+	// put back the next time the palette opens on it. Both are in command.go.
+	commands *fuzzy.Index
+	queries  [modeCount]string
+
 	// curNote is the id of the note currently in the editor, and dirty says it
 	// has unsaved edits. quiet suppresses the change notification while the
 	// editor is being filled programmatically, which would otherwise look
@@ -241,9 +247,12 @@ type Palette struct {
 	apiFocus   int
 
 	// reqDirty is unsaved text in the request pane, and envEditing says that
-	// pane is currently holding env.json rather than a request.
-	reqDirty   bool
-	envEditing bool
+	// pane is currently holding an env.json rather than a request. envEditPath
+	// is which one -- there is one per project now, and moving the highlight
+	// while typing must not redirect the save.
+	reqDirty    bool
+	envEditing  bool
+	envEditPath string
 
 	// envSeen is the modification stamp the watcher compares against. It is read
 	// and written only by the watcher goroutine -- envChanged is its sole user --
@@ -511,6 +520,7 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippe
 		openers:   place.DetectOpeners(cfg.Openers),
 		statCache: newStatCache(),
 	}
+	p.buildCommandIndex()
 	p.reloadScripts()
 	p.reloadNotes()
 	p.reloadPlaces()
@@ -574,6 +584,9 @@ func (p *Palette) setMode(mode int) {
 		return
 	}
 	p.saveIfDirty()
+	// The query being left behind belongs to the tab being left, and the one
+	// being arrived at gets its own back further down.
+	p.rememberQuery()
 	p.mode = mode
 
 	switch mode {
@@ -620,9 +633,10 @@ func (p *Palette) setMode(mode int) {
 		t.Hwnd().InvalidateRect(nil, true)
 	}
 
-	// A query typed against one mode's entries means nothing in the other's.
-	p.search.SetText("")
-	p.refilter()
+	// A query typed against one mode's entries means nothing in the other's, so
+	// each tab keeps its own and gets it back here -- selected, so the first
+	// character typed replaces it.
+	p.restoreQuery()
 	p.search.Hwnd().SetFocus()
 }
 
@@ -783,8 +797,12 @@ func (p *Palette) events() {
 		case co.VK_ESCAPE:
 			// Esc means "stop what is happening" before it means "close". A
 			// request in flight is the one thing on this window that can be
-			// interrupted, so it gets the key first.
+			// interrupted, so it gets the key first, and the command list -- which
+			// is a detour rather than a place to be -- comes next.
 			if p.mode == modeAPI && p.cancelSend() {
+				return 0
+			}
+			if p.leaveCommand() {
 				return 0
 			}
 			p.hide(true)
@@ -803,6 +821,14 @@ func (p *Palette) events() {
 			// of a pane, which is what it does in every other text field.
 			if ctrlDown() && shiftDown() && p.mode == modeAPI {
 				p.copyAsCurl()
+				return 0
+			}
+		case co.VK('P'):
+			// Ctrl+Shift+P types the ">" for you. Shift is required so that a bare
+			// Ctrl+P stays free, and because this is the combination every other
+			// palette on the machine uses for the same thing.
+			if ctrlDown() && shiftDown() {
+				p.enterCommand()
 				return 0
 			}
 		case co.VK('R'):
@@ -866,6 +892,15 @@ func (p *Palette) events() {
 		case co.VK_TAB:
 			p.search.Hwnd().SetFocus()
 			return 0
+		case co.VK('P'):
+			// The command list is reached from wherever the keyboard happens to be,
+			// the same as it is in the editors it is borrowed from. It lives in the
+			// search box, so the focus goes back there with it.
+			if ctrlDown() && shiftDown() {
+				p.search.Hwnd().SetFocus()
+				p.enterCommand()
+				return 0
+			}
 		case co.VK_F2:
 			p.beginRename()
 			return 0
@@ -914,6 +949,12 @@ func (p *Palette) events() {
 					p.copyAsCurl()
 					return 0
 				}
+			case co.VK('P'):
+				if ctrlDown() && shiftDown() {
+					p.setAPIFocus(apiFocusList)
+					p.enterCommand()
+					return 0
+				}
 			}
 			if p.editKeys(c.Hwnd(), vk) {
 				return 0
@@ -936,9 +977,19 @@ func (p *Palette) events() {
 	// DefSubclassProc would go nowhere.
 	createKeys := func(c *ui.Edit) func(ui.Wm) uintptr {
 		return func(m ui.Wm) uintptr {
-			if co.VK(m.WParam) == co.VK('D') {
+			switch co.VK(m.WParam) {
+			case co.VK('D'):
 				p.createEntry(shiftDown())
 				return 0
+			case co.VK('E'):
+				// Alt+E opens the environments file that applies to whatever the
+				// highlight is on -- one per project, so which file it is depends
+				// on where you are, and asking for it from there is the whole
+				// interface for it.
+				if p.mode == modeAPI {
+					p.toggleEnvEditor()
+					return 0
+				}
 			}
 			return c.Hwnd().DefSubclassProc(co.WM_SYSKEYDOWN, m.WParam, m.LParam)
 		}
@@ -1217,8 +1268,11 @@ func (p *Palette) show() {
 	p.input = text
 	p.resetChain()
 
-	p.search.SetText("")
-	p.refilter()
+	// The query the tab was last searched with, not an empty box. Copying one
+	// value out of a config and coming back for the next is the common case, and
+	// it should not cost the same typing twice. restoreQuery selects it, so
+	// looking for something else costs nothing either.
+	p.restoreQuery()
 	p.position()
 
 	p.shown = true
@@ -1320,6 +1374,9 @@ func (p *Palette) hide(restoreFocus bool) {
 	// Esc was pressed, because something else was clicked, or because a paste
 	// took focus back -- none of them is a decision to discard the text.
 	p.saveIfDirty()
+	// Remember what was being searched for, for the next time this tab is
+	// opened. Closing the palette is not a decision to abandon a query.
+	p.rememberQuery()
 	p.shown = false
 	p.wnd.Hwnd().ShowWindow(co.SW_HIDE)
 	if restoreFocus {
@@ -1355,7 +1412,16 @@ func (p *Palette) refilter() { p.refilterKeeping("") }
 // refilterKeeping is refilter with a row to land on: the id to re-select once
 // the list has been rebuilt, or "" to go back to the top.
 func (p *Palette) refilterKeeping(keep string) {
-	p.visible = p.indexes[p.mode].Search(p.search.Text())
+	// ">" in front of the query swaps the list over to the tabs themselves. It
+	// is a view over the same control rather than a mode of its own, so nothing
+	// below here needs to know -- only the rows and what Enter does differ.
+	cmd := false
+	if rest, ok := commandQuery(p.search.Text()); ok {
+		cmd = true
+		p.visible = p.commands.Search(rest)
+	} else {
+		p.visible = p.indexes[p.mode].Search(p.search.Text())
+	}
 
 	// Hold painting off while the list is torn down and rebuilt.
 	//
@@ -1368,6 +1434,10 @@ func (p *Palette) refilterKeeping(keep string) {
 
 	p.list.DeleteAllItems()
 	for _, it := range p.visible {
+		if cmd {
+			p.list.AddItem(label(it))
+			continue
+		}
 		switch p.mode {
 		case modeNotes:
 			p.list.AddItem(noteLabel(it))
@@ -1493,6 +1563,14 @@ func (p *Palette) setSelection(i int) {
 // would freeze the window for as long as it takes, up to the two-second
 // timeout for one with an accidental infinite loop.
 func (p *Palette) updatePreview() {
+	// The command list is a list of tabs, and a tab has no preview. The pane is
+	// left holding whatever the mode last put there rather than being blanked:
+	// the prefix may be gone again on the next keystroke, and clearing an
+	// editable note pane to show nothing would be a change to a file's window.
+	if p.commanding() {
+		return
+	}
+
 	switch p.mode {
 	case modeNotes:
 		p.showNote()
@@ -1530,6 +1608,11 @@ func (p *Palette) updatePreview() {
 // Like the preview it runs on a worker; finishApply does the rest once the
 // result comes back.
 func (p *Palette) apply() {
+	if p.commanding() {
+		p.runCommand()
+		return
+	}
+
 	switch p.mode {
 	case modeNotes:
 		p.applyNote()
@@ -1615,6 +1698,9 @@ func (p *Palette) confirm(title, text string) bool {
 // createEntry is Alt+D: a new note, a new folder, or a new place, depending on
 // which tab is showing.
 func (p *Palette) createEntry(asFolder bool) {
+	if p.commanding() {
+		return
+	}
 	switch p.mode {
 	case modePlaces:
 		p.createPlace()
@@ -1631,6 +1717,9 @@ func (p *Palette) createEntry(asFolder bool) {
 // first, and what they mean by "delete" differs -- a note is a file and goes
 // for good, a place is a shortcut and only the shortcut goes.
 func (p *Palette) deleteEntry() {
+	if p.commanding() {
+		return
+	}
 	switch p.mode {
 	case modeNotes:
 		p.deleteNote()

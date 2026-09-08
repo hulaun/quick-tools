@@ -4,6 +4,7 @@ package ui
 
 import (
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -28,17 +29,28 @@ const requestExt = ".http"
 // creating a request already knows is that they are about to write a URL.
 const newRequestTemplate = "GET {{base}}/\nAccept: application/json\n"
 
-// newEnvTemplate is offered when there is no environments file yet. The file
-// not existing is the ordinary state before the first environment is written,
-// and an empty pane would not say what belongs in it.
+// newEnvTemplate is offered when the project has no environments file yet. The
+// file not existing is the ordinary state before the first environment is
+// written, and an empty pane would not say what belongs in it.
+//
+// Four stages, because that is the shape the tab is built around: the stage is
+// global and the values are per project, so every project spelling its stages
+// the same way is what makes one Ctrl+E move the whole app between them. They
+// are only a starting point -- a project that has no SIT deletes that block --
+// but a template that named its stages differently in each project would quietly
+// give back the long cycle this design exists to avoid.
 const newEnvTemplate = `{
   "local": {
-    "base": "http://localhost:8080",
-    "user": "admin"
+    "base": "http://localhost:8080"
   },
-  "dev": {
-    "base": "https://api.dev.internal",
-    "user": "svc-dev"
+  "sit": {
+    "base": "https://api.sit.internal"
+  },
+  "uat": {
+    "base": "https://api.uat.internal"
+  },
+  "prod": {
+    "base": "https://api.corp"
   }
 }
 `
@@ -247,20 +259,37 @@ func (p *Palette) toggleEnvEditor() {
 
 	p.saveRequestIfDirty()
 
-	data, err := os.ReadFile(p.envPath)
+	// Which file depends on where the highlight is: the nearest env.json at or
+	// above the project, or -- when the project has none yet -- the path its own
+	// would go at, so the first Alt+E in a new project creates it there rather
+	// than sending the edit into the file every other project shares.
+	folder := ""
+	if r, ok := p.selectedRequest(); ok {
+		folder = r.folder
+		if r.isDir {
+			folder = r.id
+		}
+	}
+	path := p.env.EditPath(folder)
+
+	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
 		data = []byte(newEnvTemplate)
 	} else if err != nil {
-		p.setStatus("could not read " + p.envPath + ": " + err.Error())
+		p.setStatus("could not read " + path + ": " + err.Error())
 		return
 	}
 
+	// Held for the length of the edit rather than recomputed on save: moving the
+	// highlight while typing must not redirect Ctrl+S into another project's
+	// file.
+	p.envEditPath = path
 	p.envEditing = true
 	p.curRequest = ""
 	p.setPaneText(p.reqPane, string(data))
 	p.setReqEditable(true)
 	p.setPaneText(p.respPane, "")
-	p.setStatus("editing " + p.envPath + "  --  Ctrl+S saves, Ctrl+Shift+E goes back")
+	p.setStatus("editing " + path + "  --  Ctrl+S saves, Alt+E goes back")
 }
 
 // stopEditingEnv leaves the environment editor.
@@ -269,6 +298,7 @@ func (p *Palette) stopEditingEnv() {
 		return
 	}
 	p.envEditing = false
+	p.envEditPath = ""
 	p.setReqDirty(false)
 }
 
@@ -280,26 +310,44 @@ func (p *Palette) stopEditingEnv() {
 // result is reported, because an env.json that saved cleanly and then silently
 // stopped resolving would look like the substitution being broken.
 func (p *Palette) saveEnv() {
+	path := p.envEditPath
+	if path == "" {
+		return
+	}
 	text := fromCRLF(p.reqPane.Text())
 
+	// The project folder may not exist yet only in the sense that nothing has
+	// been written to it -- a project with requests in it always does. Created
+	// anyway, so the first environment can be written for a project that is
+	// being set up before its first request.
+	if dir := filepath.Dir(path); dir != "" {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			p.fatal("Could not save the environments", err)
+			return
+		}
+	}
+
 	// 0600: this file holds hostnames and, in practice, credentials.
-	if err := os.WriteFile(p.envPath, []byte(text), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		p.fatal("Could not save the environments", err)
 		return
 	}
 	p.setReqDirty(false)
 
-	fresh, err := api.LoadEnv(p.envPath)
+	// Reloaded as a tree rather than as the one file: a new project env.json is
+	// not in the map until something walks the folder for it, so saving one and
+	// then cycling would find nothing there.
+	fresh, err := api.LoadEnvTree(p.envPath, p.requestsDir())
+	p.envErr = err
+	if fresh != nil {
+		fresh.Adopt(p.env)
+		p.env = fresh
+	}
+	p.updateStripLabel()
 	if err != nil {
-		p.envErr = err
-		p.updateStripLabel()
 		p.setStatus("saved, but it does not parse: " + err.Error())
 		return
 	}
-	p.envErr = nil
-	fresh.Adopt(p.env)
-	p.env = fresh
-	p.updateStripLabel()
 
 	names := p.env.Names()
 	if len(names) == 0 {
