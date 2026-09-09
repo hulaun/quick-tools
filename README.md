@@ -52,7 +52,7 @@ HTTP and TLS stacks, linked in for the API tab.
 
 | | |
 |---|---|
-| `Ctrl+Alt+Space` | open the palette; press it again to cycle Transforms → Notes → Places → Macros → API |
+| `Ctrl+Alt+Space` | open the palette; press it again to cycle Transforms → Notes → Macros → API |
 | type | fuzzy-search whichever list you are in |
 | `↑` `↓` | move; the right pane updates |
 | `Tab` | carry on from what is highlighted — see each tab below |
@@ -77,16 +77,6 @@ In **Notes**:
 | `F2` | rename |
 | `Del` | delete the note or folder — permanently, so it asks first |
 | `Ctrl+S` | save |
-
-In **Places**:
-
-| | |
-|---|---|
-| `Tab` / `→` | move into the list of things you can do with the highlighted path |
-| `Enter` | do the highlighted one |
-| `Alt+D` | make a place out of the path on your clipboard |
-| `F2` | rename |
-| `Del` | remove the entry — the folder itself is left alone |
 
 In **Macros**:
 
@@ -202,7 +192,7 @@ stops the recording. What was captured lands in the pane in a form you can read
 before you trust it:
 
 ```
- Transforms   Notes   Places  [Macros]   API
+ Transforms   Notes  [Macros]   API
  quote
 ┌──────────────────────┬─────────────────────────────────┐
 │ Editing: Quote third │ Home                            │
@@ -258,7 +248,7 @@ one. The palette stays open, the search box clears, and the strip beside the
 tabs shows what has been applied so far:
 
 ```
- Transforms   Notes   Places   Macros   API    Java to JSON > Pretty JSON >
+ Transforms   Notes   Macros   API    Java to JSON > Pretty JSON >
 ```
 
 `Enter` ends the chain: it runs the highlighted transform against everything
@@ -337,7 +327,6 @@ marked secret with DPAPI is a planned improvement, not a shipped one.
   "autoPaste": false,
   "scriptsDir": "scripts",
   "snippetsDir": "storage/snippets",
-  "placesFile": "storage/places.json",
   "macrosFile": "storage/macros.json",
   "macroUndo": true,
   "requestsDir": "storage/requests",
@@ -357,7 +346,6 @@ quick-tools/
   storage/
     snippets/         notes
     requests/         .http requests
-    places.json
     macros.json
     env.json
 ```

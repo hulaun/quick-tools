@@ -44,7 +44,7 @@ func TestLoadReportsMalformed(t *testing.T) {
 
 // The index is the position in the file, not the position in the list. An
 // entry skipped for having no name must not shift the ones after it, or a
-// rename lands on the wrong macro -- the same trap place.Load has a test for.
+// rename lands on the wrong macro.
 func TestLoadIndexSurvivesASkippedEntry(t *testing.T) {
 	path := write(t, `[
 	  {"name": "first",  "steps": [{"key": "Home"}]},

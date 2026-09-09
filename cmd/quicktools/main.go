@@ -15,7 +15,6 @@ import (
 
 	"github.com/hulaun/quick-tools/internal/config"
 	"github.com/hulaun/quick-tools/internal/macro"
-	"github.com/hulaun/quick-tools/internal/place"
 	"github.com/hulaun/quick-tools/internal/script"
 	"github.com/hulaun/quick-tools/internal/snippet"
 	"github.com/hulaun/quick-tools/internal/transform"
@@ -60,12 +59,6 @@ func main() {
 	snippetsDir, err := config.ResolveDir(cfg.SnippetsDir)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot locate the snippets folder:", err)
-		os.Exit(1)
-	}
-
-	placesFile, err := config.ResolvePath(cfg.PlacesFile)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "cannot locate the places file:", err)
 		os.Exit(1)
 	}
 
@@ -115,7 +108,7 @@ func main() {
 	// The requests tree is walked by the same store as the notes tree: a request
 	// is a text file in a folder, which is exactly what that store reads.
 	palette, err := ui.New(cfg, reg, script.NewLoader(scriptsDir),
-		snippet.NewStore(snippetsDir), place.NewStore(placesFile),
+		snippet.NewStore(snippetsDir),
 		macro.NewStore(macrosFile), snippet.NewStore(requestsDir), envFile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not build the palette window:", err)

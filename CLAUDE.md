@@ -163,28 +163,28 @@ Build all the mechanical parts fully — those were never the point.
   and the `.test.json` fixture runner behind `quicktools.exe -test-scripts`.
 - `internal/snippet` — walks `snippets/`, one entry per text file plus the
   folders themselves, and writes: `Save`, `CreateNote`, `CreateFolder`.
-- The palette has five modes -- `modeTransforms`, `modeNotes`, `modePlaces`,
-  `modeMacros` and `modeAPI` -- shown as five tabs and cycled by the hotkey.
-  Macros sits fourth on purpose: the first three act on text or on the
-  filesystem, and the last two reach outside the process, one synthesising input
-  into another application and the other sending a request over the network.
+- The palette has four modes -- `modeTransforms`, `modeNotes`, `modeMacros`
+  and `modeAPI` -- shown as four tabs and cycled by the hotkey. The first two
+  act on text, and the last two reach outside the process, one synthesising
+  input into another application and the other sending a request over the
+  network. (There were five; the Places tab was removed -- see
+  "Removed: the Places tab".)
   One index per mode, one set of controls: the list, the search box and the right-hand pane are the same three
   controls in each. In notes mode the right pane is a live editor -- `Tab` to
   move into it, `Ctrl+S` to save. Naming happens in `internal/ui/rename.go`: a
   hidden Edit moved over the highlighted row. `Ctrl+Backspace`/`Ctrl+Delete`
   delete a word in either text field.
-- **The editing keys work in notes, places, macros and API**, dispatched by mode in
+- **The editing keys work in notes, macros and API**, dispatched by mode in
   `createEntry`, `beginRename` and `deleteEntry`:
 
-  | Key | Notes | Places | Macros | API |
-  |---|---|---|---|---|
-  | `Alt+D` | new note | new place from the clipboard path, or the search box | new macro, recording immediately | new `.http` request from a template |
-  | `Shift+Alt+D` | new folder | -- | -- | new folder |
-  | `F2` | rename the file | rename the entry in places.json | rename the entry in macros.json | rename the file |
-  | `Del` | delete the file, permanently | remove the entry; the target is untouched | delete the entry | delete the file, permanently |
+  | Key | Notes | Macros | API |
+  |---|---|---|---|
+  | `Alt+D` | new note | new macro, recording immediately | new `.http` request from a template |
+  | `Shift+Alt+D` | new folder | -- | new folder |
+  | `F2` | rename the file | rename the entry in macros.json | rename the file |
+  | `Del` | delete the file, permanently | delete the entry | delete the file, permanently |
 
-  Requests follow the notes rule rather than the places one, because a request
-  *is* a file. The rename path is shared outright: `renameState.isRequest`
+  Requests follow the notes rule, because a request *is* a file. The rename path is shared outright: `renameState.isRequest`
   picks `p.requests` over `p.snippets` and both are a `snippet.Store`, so the
   work is identical and only the index to rebuild afterwards differs.
 
@@ -221,19 +221,8 @@ Build all the mechanical parts fully — those were never the point.
   nothing is armed at all -- the user's own `Ctrl+Z` is already right, and
   hooking the keyboard to watch it happen would be theatre. The estimate is a
   guess and says so; `"undo"` on a macro replaces it.
-- `internal/place` + `internal/ui/places.go` -- the Places tab. `places.json`
-  beside the exe lists named paths; Enter opens one. What Enter *does* comes
-  from what the path turns out to be: a folder opens in Explorer, an executable
-  runs, anything else goes to its registered app, so a `.pdf` needs no
-  configuration. The right-hand pane is the resolved path above a list of the
-  other things that could be done with it -- Explorer, VS Code, Notepad++, a
-  terminal, copy the path -- and **Tab or Right moves the arrow keys into that
-  list**, Left or Tab moves them back. Which list the arrows drive is shown by
-  which highlight is lit: the active one is accent blue, the other dims.
-  `"open"` in a place pins the first action, `"elevate"` uses the `runas` verb.
-  Openers are detected at startup and overridable under `openers` in
-  config.json. `places.example.json` is the checked-in template; `places.json`
-  is personal and gitignored, like `snippets/`.
+- ~~`internal/place` + `internal/ui/places.go` -- the Places tab.~~ **Removed
+  2026-09-09** -- see "Removed: the Places tab" below.
 - `internal/ui/command.go` -- the search box's memory and its command line.
   **The query is remembered per tab** and put back, wholly selected, the next
   time the palette opens on that tab: copying one value out of a config and
@@ -450,7 +439,6 @@ internal/fuzzy/     ranked search over the palette entries
 internal/config/    %APPDATA%\quick-tools\config.json
 internal/script/    goja engine + hot-reload
 internal/snippet/   note tree: walk, read, write, create
-internal/place/     places.json: parse, resolve paths, find the openers
 internal/macro/     macros.json: steps, chord text, the recorder's rules
 internal/api/       .http parser, environments, HTTP client, post-response hook
 scripts/            user .js transforms -- half checked in, so not under storage/
@@ -458,7 +446,6 @@ storage/            everything the user accumulates; gitignored as one unit
   snippets/           the Notes tab
   requests/           the API tab, one .http per file
     <project>/env.json  that project's values for each stage
-  places.json         the Places tab
   macros.json         the Macros tab
   env.json            the base layer the project files override
 storage.example/    the checked-in template: cp -r storage.example storage
@@ -502,12 +489,10 @@ Deliberately avoided: `golang.design/x/hotkey` (we own a message loop already),
   cost no extra code at all. Editing broke the symmetry: a note has a file
   behind it that gets written back, and a transform has nothing of the kind. So
   notes have their own index and their own mode. Do not merge them back.
-  **Places are not Transforms either**, for the same kind of reason: a place
-  does not consume the clipboard and does not produce text, and Enter on one
-  has to choose between several things it could do. **Nor are macros**: a macro
-  produces no text at all -- its whole output is input synthesised into another
-  process -- and its Enter is the only one in the app that does not touch the
-  clipboard. Five modes, five indexes.
+  **Macros are not Transforms either**: a macro produces no text at all -- its
+  whole output is input synthesised into another process -- and its Enter is
+  the only one in the app that does not touch the clipboard. Four modes, four
+  indexes. (Places was a fifth, on the same reasoning; it was removed.)
 - **Nothing may close over a control's `HWND` outside a handler.** Controls have
   no window handle until `WM_CREATE`, which is long after `events()` wires
   everything up, so a captured handle is zero forever. Call `.Hwnd()` inside the
@@ -1092,6 +1077,49 @@ value. And there is a test that loads the checked-in template itself. Any file
 shipped as a starting point should have one.
 
 ---
+
+## Removed: the Places tab
+
+**Removed 2026-09-09**, at the user's request. It worked; it had simply been
+made redundant by where it sat on screen.
+
+Why it went: the palette overlaps the taskbar, and Places was being used to
+open frequently-visited folders in Explorer. That job moved to the
+`quick_files` widget on the YASB status bar (the `tool-bar` project), which is
+always visible and does not have to be summoned over what you are looking at.
+
+What was deleted:
+
+- `internal/place/` (5 files, ~980 lines) and `internal/ui/places.go` plus its test
+- `modePlaces` and every switch arm on it, across `palette.go`, `command.go`,
+  `rename.go` and `run.go`
+- the right-hand pane it owned: the `pathLabel` static and the `opts` action
+  list, with their painting, scrollbar and rounded-corner wiring
+- `renameState.isPlace` and `commitPlaceRename`
+- the `wmPlaceStat` message and the background path-classification it drove
+- `Config.PlacesFile` and `Config.Openers`
+- `storage.example/places.json`
+
+`storage/places.json` was **not** deleted -- `storage/` is gitignored user data,
+and that file is the record of what the pins were migrated from. It is inert
+now and can be removed by hand whenever.
+
+Where the entries went: all 7 were migrated into the widget's pin store at
+`%USERPROFILE%\.config\yasb\quick_files\pins.json`. The `open` and `elevate`
+fields were carried across rather than dropped, because without them the hosts
+file opens unelevated -- which appears to work and then fails on save, the exact
+trap `places.example.json` warned about.
+
+Two things to know if this is ever revisited:
+
+- `moveDown` and `atEndOfSearch` were defined in `places.go` but used by every
+  mode. They now live in `palette.go`. `moveDown` is a one-line wrapper around
+  `moveSelection` and looks pointless: it is kept because every caller uses it
+  and it is the seam where a second list used to be chosen.
+- Historical prose elsewhere in this file (the gotchas around stat-ing paths and
+  hand-edited JSON, and the size measurement) still discusses Places. That is
+  kept deliberately as history -- the reasoning was hard won and still applies
+  to `macros.json`, which is edited by hand and by the palette in the same way.
 
 ## Next steps
 

@@ -19,12 +19,10 @@ type renameState struct {
 	id     string // the note, folder or place being named
 	isDir  bool
 
-	// A place and a macro are renamed through the same box -- but neither has a
-	// file behind it, so the new name is written into places.json or macros.json
-	// rather than applied with os.Rename. entryIdx is the position in whichever
-	// of the two it is, which is the file position and not the row: the list is
-	// sorted for reading and its order is not the file's.
-	isPlace  bool
+	// A macro is renamed through the same box -- but it has no file behind it,
+	// so the new name is written into macros.json rather than applied with
+	// os.Rename. entryIdx is its position in that file and not the row: the list
+	// is sorted for reading and its order is not the file's.
 	isMacro  bool
 	entryIdx int
 	was      string // the name the box opened with, to spot "nothing changed"
@@ -56,13 +54,6 @@ func (p *Palette) beginRename() {
 		p.saveIfDirty()
 		st = renameState{active: true, id: r.id, isDir: r.isDir, was: r.name}
 		show = r.name
-	case modePlaces:
-		r, ok := p.selectedPlace()
-		if !ok {
-			return
-		}
-		st = renameState{active: true, isPlace: true, entryIdx: r.Index, was: r.Name}
-		show = r.Name
 	case modeMacros:
 		r, ok := p.selectedMacro()
 		if !ok {
@@ -144,10 +135,6 @@ func (p *Palette) commitRename() {
 	st := p.renaming
 	p.endRename()
 
-	if st.isPlace {
-		p.commitPlaceRename(st, name)
-		return
-	}
 	if st.isMacro {
 		p.commitMacroRename(st, name)
 		return
@@ -191,29 +178,6 @@ func (p *Palette) commitRename() {
 	p.focusAfterRename(renameState{id: newID, isDir: st.isDir, isRequest: st.isRequest})
 }
 
-// commitPlaceRename writes a place's new name into places.json.
-//
-// Unlike a note there is no file to move and nothing to collide with -- two
-// places may reasonably be called the same thing -- so the only refusal is an
-// empty name, which would leave a row with nothing to click on.
-func (p *Palette) commitPlaceRename(st renameState, name string) {
-	if name == "" || name == st.was {
-		p.selectByPlaceIndex(st.entryIdx)
-		p.search.Hwnd().SetFocus()
-		return
-	}
-
-	if err := p.places.SetName(st.entryIdx, name); err != nil {
-		p.fatal("Could not rename the place", err)
-		p.selectByPlaceIndex(st.entryIdx)
-		return
-	}
-
-	p.reloadPlaces()
-	p.refilter()
-	p.selectByPlaceIndex(st.entryIdx)
-	p.search.Hwnd().SetFocus()
-}
 
 // cancelRename drops the name box without touching the file. The placeholder
 // name a new note was created with is left in place, exactly as Esc leaves
@@ -224,11 +188,6 @@ func (p *Palette) cancelRename() {
 	}
 	st := p.renaming
 	p.endRename()
-	if st.isPlace {
-		p.selectByPlaceIndex(st.entryIdx)
-		p.search.Hwnd().SetFocus()
-		return
-	}
 	if st.isMacro {
 		p.selectByMacroIndex(st.entryIdx)
 		p.search.Hwnd().SetFocus()

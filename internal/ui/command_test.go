@@ -77,7 +77,6 @@ func TestCommandIndexFindsTabsByTag(t *testing.T) {
 		"login":  modeNotes,
 		"http":   modeAPI,
 		"replay": modeMacros,
-		"folder": modePlaces,
 		"json":   modeTransforms,
 	}
 	p := &Palette{}

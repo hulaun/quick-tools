@@ -151,8 +151,7 @@ type Macro struct {
 
 	// Index is the entry's position in macros.json, filled in by Load and never
 	// written back. Renaming and deleting address it, because the list on screen
-	// is sorted for reading and its order is not the file's -- the same rule, and
-	// the same trap, as place.Place.Index.
+	// is sorted for reading and its order is not the file's.
 	Index int `json:"-"`
 }
 

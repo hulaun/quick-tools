@@ -53,8 +53,6 @@ func commandTags(mode int) []string {
 		return []string{"case", "json", "encode", "decode", "path", "lines", "text", "clipboard"}
 	case modeNotes:
 		return []string{"snippets", "config", "login", "password", "scratch"}
-	case modePlaces:
-		return []string{"folders", "paths", "open", "explorer", "terminal"}
 	case modeMacros:
 		return []string{"keystrokes", "record", "replay", "keys"}
 	case modeAPI:

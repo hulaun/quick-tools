@@ -14,6 +14,11 @@ import (
 	"github.com/hulaun/quick-tools/internal/winapi"
 )
 
+// colNoBorder is DWMWA_COLOR_NONE, not a colour: handed to
+// DWMWA_BORDER_COLOR it removes the window's outer border entirely rather than
+// painting one. Any real colour draws a one-pixel line around the window.
+const colNoBorder win.COLORREF = 0xffff_fffe
+
 // Colours.
 //
 // A dark surface set close to the Windows 11 palette. Change these and rebuild;
@@ -29,7 +34,7 @@ var (
 	colBg      = colGlass                  // window background, and the list behind the rows
 	colSurface = win.RGB(0x1c, 0x1c, 0x1c) // the solid panels: search box, editor, request, response
 	colText    = win.RGB(0xe8, 0xe8, 0xe8) // primary text
-	colBorder  = win.RGB(0x3a, 0x3a, 0x3a) // the window's thin outer border
+	colBorder  = colNoBorder               // the window's outer border: none
 	colSel     = win.RGB(0x2b, 0x2b, 0x2b) // highlighted row and the active tab
 	colSelDim  = win.RGB(0x2b, 0x2b, 0x2b) // highlighted row in the list that is not taking the arrow keys
 	colSelText = win.RGB(0xff, 0xff, 0xff) // text on a highlighted row

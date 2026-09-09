@@ -495,10 +495,10 @@ func (e *Env) EditPath(folder string) string {
 // Expand substitutes {{vars}} and reports, in order and without duplicates, any
 // that had no value.
 //
-// An unknown variable is left exactly as written, for the same reason
-// place.expand leaves an unset %VAR% alone: "{{base}}/orders" quietly becoming
-// "/orders" would send a real request somewhere wrong, where the unexpanded
-// name says what is missing. The caller shows the missing names; nothing is
+// An unknown variable is left exactly as written, on the same reasoning that
+// leaves an unset %VAR% alone when expanding a path: "{{base}}/orders" quietly
+// becoming "/orders" would send a real request somewhere wrong, where the
+// unexpanded name says what is missing. The caller shows the missing names; nothing is
 // silently dropped.
 //
 // One pass, so a value that itself contains {{...}} is not expanded again. That

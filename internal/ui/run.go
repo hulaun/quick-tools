@@ -19,7 +19,6 @@ import (
 const (
 	wmRunDone        = co.WM(0x8000 + 2) // a transform finished on a worker
 	wmSourcesChanged = co.WM(0x8000 + 3) // the scripts, snippets or places changed
-	wmPlaceStat      = co.WM(0x8000 + 4) // a place's path has been classified
 	wmSendDone       = co.WM(0x8000 + 5) // an HTTP request finished on a worker
 	wmRoundCorners   = co.WM(0x8000 + 6) // repaint once the first paint is done
 
@@ -249,16 +248,12 @@ func (p *Palette) runEvents() {
 	p.wnd.On().Wm(wmSourcesChanged, func(_ ui.Wm) uintptr {
 		p.reloadScripts()
 		p.reloadNotes()
-		p.reloadPlaces()
 		p.reloadMacros()
 		p.reloadRequests()
 		p.reloadEnv()
 		return 0
 	})
 
-	// A path has been classified on a worker. Redraw the pane so the actions
-	// that were waiting on it appear; showPlace reads the answer from the cache
-	// rather than being handed it, so a stale result is simply ignored.
 	// The rounded corners are not real until this runs -- see winapi.RedrawAll
 	// for what is stale and why. It is posted rather than called, because a
 	// redraw issued in the same turn of the message pump as the first paint is
@@ -266,13 +261,6 @@ func (p *Palette) runEvents() {
 	// Arriving as a message is what puts it after.
 	p.wnd.On().Wm(wmRoundCorners, func(_ ui.Wm) uintptr {
 		winapi.RedrawAll(uintptr(p.wnd.Hwnd()))
-		return 0
-	})
-
-	p.wnd.On().Wm(wmPlaceStat, func(_ ui.Wm) uintptr {
-		if p.shown && p.mode == modePlaces {
-			p.showPlace()
-		}
 		return 0
 	})
 }

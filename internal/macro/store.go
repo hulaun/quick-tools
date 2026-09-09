@@ -11,7 +11,7 @@ import (
 
 // Store reads macros.json and reports when it has been edited, so a macro
 // corrected by hand shows up without restarting the app -- the same contract
-// place.Store offers, for the same reason.
+// snippet.Store offers for the notes tree, for the same reason.
 type Store struct {
 	path string
 
@@ -54,8 +54,8 @@ func Load(path string) ([]Macro, error) {
 	for i, m := range raw {
 		// The index is assigned before anything is skipped, so it stays the
 		// position in the file rather than the position in the list. Getting this
-		// wrong renames the entry above or below the one on screen -- the same trap
-		// place.Load has a test pinning.
+		// wrong renames the entry above or below the one on screen. There is a
+		// test pinning it.
 		m.Index = i
 		if m.Name == "" {
 			continue

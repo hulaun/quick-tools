@@ -73,9 +73,9 @@ func (p *Palette) watchSources(hwnd win.HWND) {
 			// first one that changed and leave the others' timestamps unread, so
 			// the next tick would report them as changed all over again.
 			scripts, notes := p.loader.Changed(), p.snippets.Changed()
-			places, requests := p.places.Changed(), p.requestsChanged()
-			macros, env := p.macros.Changed(), p.envChanged()
-			if scripts || notes || places || macros || requests || env {
+			macros, requests := p.macros.Changed(), p.requestsChanged()
+			env := p.envChanged()
+			if scripts || notes || macros || requests || env {
 				hwnd.PostMessage(wmSourcesChanged, 0, 0)
 			}
 		}

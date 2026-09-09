@@ -29,15 +29,10 @@ type Config struct {
 	ScriptsDir  string `json:"scriptsDir"`
 	SnippetsDir string `json:"snippetsDir"`
 
-	// PlacesFile is the list of named locations behind the Places tab. It is one
-	// file rather than a folder of them, unlike snippets: a place is a single
-	// line, and a file each would be more filing than the thing being filed.
-	PlacesFile string `json:"placesFile"`
-
 	// MacrosFile is the recorded keystroke sequences behind the Macros tab. One
-	// file rather than a folder of them, for the same reason as places: a macro
-	// is a short list of steps, and a file each would be more filing than the
-	// thing being filed.
+	// file rather than a folder of them, unlike snippets: a macro is a short
+	// list of steps, and a file each would be more filing than the thing being
+	// filed.
 	MacrosFile string `json:"macrosFile"`
 
 	// MacroUndo lets the palette turn the first Ctrl+Z after a multi-change
@@ -54,11 +49,6 @@ type Config struct {
 	RequestsDir string `json:"requestsDir"`
 	EnvFile     string `json:"envFile"`
 
-	// Openers maps an opener id -- "code", "notepad++", "terminal" -- to the
-	// executable that serves it. Anything set here wins over what was detected,
-	// and an empty value removes that opener from the menu. Left unset, all
-	// three are found automatically where they are installed.
-	Openers map[string]string `json:"openers,omitempty"`
 }
 
 // Default returns the settings used when no file exists yet.
@@ -68,7 +58,6 @@ func Default() Config {
 		AutoPaste:   false,
 		ScriptsDir:  "scripts",
 		SnippetsDir: "storage/snippets",
-		PlacesFile:  "storage/places.json",
 		MacrosFile:  "storage/macros.json",
 		MacroUndo:   true,
 		RequestsDir: "storage/requests",

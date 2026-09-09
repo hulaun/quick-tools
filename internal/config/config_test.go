@@ -33,7 +33,6 @@ func TestDefaultsAreUnderStorage(t *testing.T) {
 
 	for _, c := range []struct{ name, got, want string }{
 		{"snippets", cfg.SnippetsDir, "storage/snippets"},
-		{"places", cfg.PlacesFile, "storage/places.json"},
 		{"macros", cfg.MacrosFile, "storage/macros.json"},
 		{"requests", cfg.RequestsDir, "storage/requests"},
 		{"env", cfg.EnvFile, "storage/env.json"},

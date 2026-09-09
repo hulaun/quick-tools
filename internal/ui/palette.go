@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode/utf16"
 	"unsafe"
 
 	"github.com/rodrigocfd/windigo/co"
@@ -21,7 +22,6 @@ import (
 	"github.com/hulaun/quick-tools/internal/api"
 	"github.com/hulaun/quick-tools/internal/config"
 	"github.com/hulaun/quick-tools/internal/fuzzy"
-	"github.com/hulaun/quick-tools/internal/place"
 	"github.com/hulaun/quick-tools/internal/transform"
 	"github.com/hulaun/quick-tools/internal/winapi"
 )
@@ -125,7 +125,6 @@ const (
 const (
 	modeTransforms = iota
 	modeNotes
-	modePlaces
 	modeMacros
 	modeAPI
 	modeCount
@@ -140,8 +139,6 @@ func tabTitle(mode int, dirty bool) string {
 			return "Notes *"
 		}
 		return "Notes"
-	case modePlaces:
-		return "Places"
 	case modeMacros:
 		return "Macros"
 	case modeAPI:
@@ -163,11 +160,6 @@ type Palette struct {
 	preview  *ui.Edit
 	nameEdit *ui.Edit
 
-	// The right-hand pane in places mode: the resolved path, and the list of
-	// things that can be done with it.
-	pathLabel *ui.Static
-	opts      *ui.ListView
-
 	// The right-hand side in API mode.
 	reqPane     *ui.Edit
 	statusLabel *ui.Static
@@ -183,24 +175,7 @@ type Palette struct {
 	tray     *tray
 	loader   scriptLoader
 	snippets snippetStore
-	places   placeStore
 	runner   *runner
-
-	// openers maps an opener id to the executable serving it, detected once at
-	// startup and overridden from config.
-	openers place.Openers
-
-	// actions is what the right-hand list is showing for the highlighted place,
-	// optIdx is the highlighted one, and optFocus says the arrow keys are
-	// driving that list rather than the places list.
-	actions   []action
-	optIdx    int
-	optFocus  bool
-	statCache *statCache
-
-	// placesErr is a malformed places.json, reported in the pane rather than
-	// swallowed: an empty list with no reason looks like a broken tab.
-	placesErr error
 
 	// The Macros tab. rec is the recording in progress, if any, and undo is the
 	// one-shot watch for the Ctrl+Z after a replay. Both own a keyboard hook, so
@@ -302,7 +277,7 @@ type Palette struct {
 
 // New builds the palette window and its controls. Nothing is displayed yet --
 // the window is created hidden and stays that way until the hotkey fires.
-func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippets snippetStore, places placeStore, macros macroStore, requests snippetStore, envPath string) (*Palette, error) {
+func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippets snippetStore, macros macroStore, requests snippetStore, envPath string) (*Palette, error) {
 	th, err := newTheme()
 	if err != nil {
 		return nil, err
@@ -403,30 +378,6 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippe
 			WndExStyle(co.WS_EX_LEFT),
 	)
 
-	// The right-hand pane in places mode. Both are created hidden: the palette
-	// opens in transform mode, where the editor occupies the same rectangle, and
-	// only one of the two may be on screen at a time.
-	pathLabel := ui.NewStatic(wnd,
-		ui.OptsStatic().
-			Position(ui.Dpi(rightX, listTop)).
-			Size(ui.Dpi(rightW, pathH)).
-			// No SS_ENDELLIPSIS: a path truncated in the middle of a folder name
-			// says less than one wrapped onto a second line, and there is room.
-			CtrlStyle(co.SS_LEFT|co.SS_EDITCONTROL).
-			WndStyle(co.WS_CHILD).
-			WndExStyle(co.WS_EX_LEFT),
-	)
-
-	opts := ui.NewListView(wnd,
-		ui.OptsListView().
-			Position(ui.Dpi(rightX, optsY)).
-			Size(ui.Dpi(rightW, optsH)).
-			CtrlStyle(co.LVS_REPORT|co.LVS_SINGLESEL|co.LVS_NOCOLUMNHEADER).
-			CtrlExStyle(co.LVS_EX_FULLROWSELECT|co.LVS_EX_DOUBLEBUFFER).
-			Column("Action", ui.DpiX(rightW-24)).
-			WndStyle(co.WS_CHILD).
-			WndExStyle(co.WS_EX_LEFT),
-	)
 
 	// The right-hand side in API mode: the request above, a status strip, and
 	// the response below. Created hidden, like the places pane, because the
@@ -496,9 +447,6 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippe
 		preview:  preview,
 		nameEdit: nameEdit,
 
-		pathLabel: pathLabel,
-		opts:      opts,
-
 		reqPane:     reqPane,
 		statusLabel: statusLabel,
 		respPane:    respPane,
@@ -510,20 +458,16 @@ func New(cfg config.Config, reg *transform.Registry, loader scriptLoader, snippe
 		tray:       tr,
 		loader:     loader,
 		snippets:   snippets,
-		places:     places,
 		macros:     macros,
 		requests:   requests,
 		envPath:    envPath,
 		runner:     newRunner(),
 		sender:     newSender(),
 
-		openers:   place.DetectOpeners(cfg.Openers),
-		statCache: newStatCache(),
 	}
 	p.buildCommandIndex()
 	p.reloadScripts()
 	p.reloadNotes()
-	p.reloadPlaces()
 	p.reloadMacros()
 	p.reloadRequests()
 	p.reloadEnv()
@@ -564,8 +508,6 @@ func (p *Palette) showRightPane(mode int) {
 	editor := mode == modeTransforms || mode == modeNotes || mode == modeMacros
 	p.preview.Hwnd().ShowWindow(vis(editor))
 
-	p.pathLabel.Hwnd().ShowWindow(vis(mode == modePlaces))
-	p.opts.Hwnd().ShowWindow(vis(mode == modePlaces))
 
 	api := mode == modeAPI
 	p.reqPane.Hwnd().ShowWindow(vis(api))
@@ -596,10 +538,6 @@ func (p *Palette) setMode(mode int) {
 		setCueBanner(p.search.Hwnd(), "Search transforms")
 	case modeNotes:
 		setCueBanner(p.search.Hwnd(), "Search notes")
-	case modePlaces:
-		p.curNote = ""
-		p.setEditable(false)
-		setCueBanner(p.search.Hwnd(), "Search places")
 	case modeMacros:
 		p.curNote = ""
 		p.setEditable(false)
@@ -623,11 +561,6 @@ func (p *Palette) setMode(mode int) {
 
 	// Tab starts back in the search box whichever pane it was left in.
 	p.apiFocus = apiFocusList
-
-	// The arrow keys always start on the places list, whichever list they were
-	// driving when the mode was last left.
-	p.optFocus = false
-	p.optIdx = 0
 
 	for _, t := range p.tabs {
 		t.Hwnd().InvalidateRect(nil, true)
@@ -682,7 +615,7 @@ func (p *Palette) events() {
 		if h == p.chainLabel.Hwnd() {
 			return p.theme.paintChainLabel(m)
 		}
-		if h == p.pathLabel.Hwnd() || h == p.statusLabel.Hwnd() {
+		if h == p.statusLabel.Hwnd() {
 			return p.theme.paintPathLabel(m)
 		}
 		return p.theme.paintControlBackground(m)
@@ -773,18 +706,6 @@ func (p *Palette) events() {
 		case co.VK_UP:
 			p.moveDown(-arrowStep())
 			return 0
-		case co.VK_RIGHT:
-			// Right is the other way into the action list, for when reaching for
-			// Tab is more thought than pointing at the pane it moves to.
-			if p.mode == modePlaces && !p.optFocus && p.atEndOfSearch() {
-				p.toggleOptFocus()
-				return 0
-			}
-		case co.VK_LEFT:
-			if p.mode == modePlaces && p.optFocus {
-				p.toggleOptFocus()
-				return 0
-			}
 		case co.VK_RETURN:
 			p.apply()
 			return 0
@@ -849,8 +770,6 @@ func (p *Palette) events() {
 				p.chainStep()
 			case modeNotes:
 				p.preview.Hwnd().SetFocus()
-			case modePlaces:
-				p.toggleOptFocus()
 			case modeAPI:
 				p.setAPIFocus(nextAPIFocus(apiFocusList, shiftDown()))
 			}
@@ -1068,10 +987,7 @@ func (p *Palette) events() {
 		if nm.IItem >= 0 {
 			p.setSelection(int(nm.IItem))
 		}
-		switch p.mode {
-		case modePlaces:
-			p.optFocus = false
-		case modeAPI:
+		if p.mode == modeAPI {
 			p.apiFocus = apiFocusList
 		}
 		p.search.Hwnd().SetFocus()
@@ -1093,44 +1009,17 @@ func (p *Palette) events() {
 	// window is flat grey with black text. So the control is never allowed to
 	// select anything: the highlight is ours, tracked in selIdx and drawn here.
 	p.list.On().NmCustomDraw(func(nm *win.NMLVCUSTOMDRAW) co.CDRF {
-		// In places mode the arrow keys drive one of two lists, and which one is
+		// In API mode the arrow keys drive one of several panes, and which one is
 		// shown by which highlight is lit: the active list keeps the accent
 		// colour, the other dims to a muted one. Nothing else on the window says
 		// where the keys are going.
 		active := true
-		switch p.mode {
-		case modePlaces:
-			active = !p.optFocus
-		case modeAPI:
+		if p.mode == modeAPI {
 			active = p.apiFocus == apiFocusList
 		}
 		return p.drawRow(p.list, nm, p.selIdx, active)
 	})
 
-	// The action list on the right, in places mode. It gets the same treatment
-	// as the main list for the same reason: a list view paints a selected row in
-	// system colours and ignores custom draw, so it is never allowed to select.
-	p.opts.On().LvnItemChanging(func(_ *win.NMLISTVIEW) bool { return true })
-
-	p.opts.On().NmClick(func(nm *win.NMITEMACTIVATE) {
-		if nm.IItem >= 0 && int(nm.IItem) < len(p.actions) {
-			p.optIdx = int(nm.IItem)
-			p.optFocus = true
-			p.list.Hwnd().InvalidateRect(nil, true)
-			p.opts.Hwnd().InvalidateRect(nil, true)
-		}
-	})
-
-	p.opts.On().NmDblClk(func(nm *win.NMITEMACTIVATE) {
-		if nm.IItem >= 0 && int(nm.IItem) < len(p.actions) {
-			p.optIdx = int(nm.IItem)
-			p.apply()
-		}
-	})
-
-	p.opts.On().NmCustomDraw(func(nm *win.NMLVCUSTOMDRAW) co.CDRF {
-		return p.drawRow(p.opts, nm, p.optIdx, p.mode == modePlaces && p.optFocus)
-	})
 
 	// How each control meets the acrylic backdrop, and which of them carry the
 	// overlay scrollbar. Solid is everything holding text that is read or typed;
@@ -1141,14 +1030,11 @@ func (p *Palette) events() {
 	solid := func() win.HBRUSH { return p.theme.surface }
 	for _, s := range []surface{
 		{ctrl: p.list, scrolls: true, fill: glass, radius: paneRadius},
-		{ctrl: p.opts, scrolls: true, fill: glass, radius: paneRadius},
 		{ctrl: p.preview, solid: true, scrolls: true, fill: solid, radius: paneRadius},
 		{ctrl: p.reqPane, solid: true, scrolls: true, fill: solid, radius: paneRadius},
 		{ctrl: p.respPane, solid: true, scrolls: true, fill: solid, radius: paneRadius},
 		{ctrl: p.search, solid: true, radius: searchRadius},
 		{ctrl: p.nameEdit, solid: true},
-		{ctrl: p.pathLabel, solid: true, radius: paneRadius,
-			label: co.DT_LEFT | co.DT_WORDBREAK | co.DT_NOPREFIX},
 		{ctrl: p.statusLabel, solid: true, radius: paneRadius,
 			label: co.DT_LEFT | co.DT_SINGLELINE | co.DT_VCENTER | co.DT_END_ELLIPSIS | co.DT_NOPREFIX},
 	} {
@@ -1315,8 +1201,8 @@ func (p *Palette) applyLook() {
 		fmt.Fprintln(os.Stderr, "window chrome:", err)
 	}
 
-	for _, h := range []win.HWND{p.search.Hwnd(), p.list.Hwnd(), p.preview.Hwnd(), p.opts.Hwnd(),
-		p.pathLabel.Hwnd(), p.reqPane.Hwnd(), p.respPane.Hwnd(), p.statusLabel.Hwnd()} {
+	for _, h := range []win.HWND{p.search.Hwnd(), p.list.Hwnd(), p.preview.Hwnd(),
+		p.reqPane.Hwnd(), p.respPane.Hwnd(), p.statusLabel.Hwnd()} {
 		p.theme.applyFont(h)
 		darkenScrollbars(h)
 	}
@@ -1329,7 +1215,6 @@ func (p *Palette) applyLook() {
 	// Order matters -- the region below is measured from the window rectangle,
 	// so it has to be applied after the widening.
 	hideNativeVScroll(p.list.Hwnd())
-	hideNativeVScroll(p.opts.Hwnd())
 	for _, e := range []*ui.Edit{p.preview, p.reqPane, p.respPane} {
 		hideNativeVScroll(e.Hwnd())
 		setEditFormatRect(e.Hwnd())
@@ -1338,10 +1223,8 @@ func (p *Palette) applyLook() {
 	trim := scrollbarInset()
 	roundCorners(p.search.Hwnd(), ui.DpiX(searchRadius), 0)
 	setEditMargins(p.search.Hwnd())
-	for _, h := range []win.HWND{p.pathLabel.Hwnd(), p.statusLabel.Hwnd()} {
-		roundCorners(h, ui.DpiX(paneRadius), 0)
-	}
-	for _, h := range []win.HWND{p.list.Hwnd(), p.opts.Hwnd(),
+	roundCorners(p.statusLabel.Hwnd(), ui.DpiX(paneRadius), 0)
+	for _, h := range []win.HWND{p.list.Hwnd(),
 		p.preview.Hwnd(), p.reqPane.Hwnd(), p.respPane.Hwnd()} {
 		roundCorners(h, ui.DpiX(paneRadius), trim)
 	}
@@ -1357,7 +1240,6 @@ func (p *Palette) applyLook() {
 		roundCorners(t.Hwnd(), tr, 0)
 	}
 	darkenListView(p.list.Hwnd())
-	darkenListView(p.opts.Hwnd())
 	setCueBanner(p.search.Hwnd(), "Search transforms")
 	winapi.HideFocusRectangles(uintptr(p.wnd.Hwnd()))
 }
@@ -1441,8 +1323,6 @@ func (p *Palette) refilterKeeping(keep string) {
 		switch p.mode {
 		case modeNotes:
 			p.list.AddItem(noteLabel(it))
-		case modePlaces:
-			p.list.AddItem(placeLabel(it))
 		case modeMacros:
 			p.list.AddItem(macroLabel(it))
 		case modeAPI:
@@ -1492,6 +1372,31 @@ func (p *Palette) selected() (fuzzy.Item, bool) {
 		return p.visible[0], true
 	}
 	return p.visible[p.selIdx], true
+}
+
+// moveDown moves the highlighted row. It used to pick between two lists -- the
+// entries and a per-place action list -- which is why callers still go through
+// it rather than calling moveSelection directly.
+// atEndOfSearch reports whether the caret sits past the last character of the
+// query with nothing selected. Del and Backspace use it so that editing a typo
+// never turns into deleting an entry.
+func (p *Palette) atEndOfSearch() bool {
+	h := p.search.Hwnd()
+	start, end := editSelection(h)
+	if start != end {
+		return false
+	}
+	text, err := h.GetWindowText()
+	if err != nil {
+		return true
+	}
+	// EM_GETSEL counts UTF-16 code units, so the length has to be measured in
+	// the same units rather than in bytes or runes.
+	return start >= len(utf16.Encode([]rune(text)))
+}
+
+func (p *Palette) moveDown(delta int) {
+	p.moveSelection(delta)
 }
 
 func (p *Palette) moveSelection(delta int) {
@@ -1575,12 +1480,6 @@ func (p *Palette) updatePreview() {
 	case modeNotes:
 		p.showNote()
 		return
-	case modePlaces:
-		// A different place means a different set of actions, so the highlight
-		// goes back to the first -- which is the one Enter runs.
-		p.optIdx = 0
-		p.showPlace()
-		return
 	case modeMacros:
 		p.showMacro()
 		return
@@ -1616,9 +1515,6 @@ func (p *Palette) apply() {
 	switch p.mode {
 	case modeNotes:
 		p.applyNote()
-		return
-	case modePlaces:
-		p.applyPlace()
 		return
 	case modeMacros:
 		p.applyMacro()
@@ -1702,8 +1598,6 @@ func (p *Palette) createEntry(asFolder bool) {
 		return
 	}
 	switch p.mode {
-	case modePlaces:
-		p.createPlace()
 	case modeMacros:
 		p.createMacro()
 	case modeAPI:
@@ -1713,9 +1607,7 @@ func (p *Palette) createEntry(asFolder bool) {
 	}
 }
 
-// deleteEntry is Del: the highlighted note, or the highlighted place. Both ask
-// first, and what they mean by "delete" differs -- a note is a file and goes
-// for good, a place is a shortcut and only the shortcut goes.
+// deleteEntry is Del: the highlighted note, macro or request. Each asks first.
 func (p *Palette) deleteEntry() {
 	if p.commanding() {
 		return
@@ -1723,8 +1615,6 @@ func (p *Palette) deleteEntry() {
 	switch p.mode {
 	case modeNotes:
 		p.deleteNote()
-	case modePlaces:
-		p.deletePlace()
 	case modeMacros:
 		p.deleteMacro()
 	case modeAPI:
