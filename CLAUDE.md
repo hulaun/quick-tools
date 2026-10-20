@@ -29,8 +29,11 @@ already won.
 
 ## Division of work — IMPORTANT
 
-The user is building this partly to learn. **Six scripts are reserved for
-them**, laddered by difficulty:
+Six scripts in `scripts/` were reserved for the user to write as an exercise,
+laddered by difficulty. **All six were written by Claude on 2026-10-20, at the
+user's explicit request** — asked for in as many words, confirmed once when the
+reservation was pointed out, and answered "write all six fully". The
+reservation is therefore spent and the folder is finished:
 
 1. `scripts/query-string-to-json.js` — decoding, repeated keys → arrays
 2. `scripts/json-to-query-string.js` — the reverse: flattening a tree into keys
@@ -39,41 +42,62 @@ them**, laddered by difficulty:
 5. `scripts/js-object-to-json.js` — recursive descent over a bracketed grammar
 6. `scripts/json-to-js.js` — the reverse, and why `JSON.parse` cannot be used
 
-`scripts/java-to-json.js` **is written** — by the user first, then rewritten on
-2026-08-29 at their explicit request after they had done it themselves and
-wanted to see another take. That sequence is the only thing that makes it an
-exception. Do not treat it as a precedent for filling in the other six; the rule
-below still holds, and it is overridden only by the user asking in as many
-words. Its 22 fixtures are the worked example the folder no longer has
-elsewhere, so point at it rather than writing a new one.
+`scripts/java-to-json.js` was written the same way, and earlier: by the user
+first, then rewritten on 2026-08-29 at their request after they had done it
+themselves. It remains the best-commented of the seven and the one to read
+first.
 
 Three of them are pairs pointing in opposite directions (query string, SQL
-values, JS literal), which is deliberate: the second of a pair is faster than
-the first, and each direction's fixtures are largely the other's outputs.
-
-None duplicates a built-in, so nothing is broken while they are unwritten —
-each is a capability the tool does not have yet. That was deliberate: handing
-back a working built-in as a stub would have cost the user a feature.
+values, JS literal), and each direction's fixtures are largely the other's
+outputs. None duplicates a built-in — each was a capability the tool did not
+have, which is why nothing was broken while they were stubs.
 
 The set was revised on 2026-08-29 at the user's request: `properties-to-json`
 and `stacktrace-to-json` were dropped as things they will not use,
 `java-to-json` changed from parsing `toString()` output to reading a class
 declaration into a JSON template with `""` values, and the four JSON-out
 transforms were added. `csv-line-to-json.js` and `curl-to-json.js`, mentioned in
-earlier versions of this file, no longer exist; `java-to-json.js` is now the
-worked example in their place.
+earlier versions of this file, no longer exist.
 
-**Do not implement these.** The scaffolding is finished:
-- stubs with the contract wired up and hints, but no parser
-- `scripts/README.md` — the grammar, the shared rules, and the ambiguity policy
-- `scripts/*.test.json` — 119 cases; the six reserved ones are red
-- `quicktools.exe -test-scripts` — the red/green loop, `-only <text>` to narrow
-  it to one script or one case and print the values untruncated
+`quicktools.exe -test-scripts` is **116 cases, all green**, across all seven
+scripts. (Earlier versions of this file said 119; 116 is what the fixture files
+actually hold.) `-only <text>` narrows it to one script or one case and prints
+the values untruncated.
 
-If asked to "finish the project", finish everything except these six and say
-so. Do not "helpfully" fill in a stub.
+### What the six have in common, and the one thing to know before editing them
 
-### A seventh, in Go: `api.ParseCurl`
+**Four of them read JSON with a hand-written reader rather than `JSON.parse`,
+and that is not optional.** `JSON.parse` turns every number into a float64, so
+`9007199254740993` comes back as `...992` — and every Java `Long` id lives in
+that range. The four that read JSON and write something else (`json-to-js`,
+`json-to-query-string`, and both SQL writers) therefore carry a number from
+input to output as the **text it was written as**, and never let it become a
+JavaScript number. Fixtures pin this in each of them. If a reader is ever
+"simplified" into `JSON.parse`, those four fixtures are what go red.
+
+`js-object-to-json` is the exception and goes through real numbers on purpose:
+its output is JSON, and a fixture requires `1e3` to come out as `1000`.
+
+That reader (`readJson`, ~190 lines) is **duplicated verbatim in four files**,
+and so are the SQL pair's `rowOf`/`snake`/`sqlValue`/`compact`. This is forced,
+not sloppy: `internal/script` compiles each `.js` on its own with no import
+mechanism, and every `.js` in the folder becomes a palette entry, so a shared
+`_lib.js` would show up as a transform. A change to the reader has to be made in
+all four. If that ever becomes a real cost, the move is to make the shared half
+a Go built-in, not to invent an include.
+
+Two other decisions worth not re-litigating:
+
+- **`js-object-to-json` must never use `eval` or `new Function`.** It runs
+  against whatever is on the clipboard, and both of those execute it. The
+  fixture `{a: (function(){ return 1 })()}` exists to catch the shortcut: a
+  parser rejects it, `eval` returns `{a: 1}` and passes everything else.
+- **An unescaped quote inside a string is recovered, not rejected.**
+  `{a: 'it's'}` is not valid JavaScript but is what a careless copy produces, so
+  a quote only ends a string when what follows it could follow a value. A
+  fixture pins the resulting `"it's"`.
+
+### Still reserved, in Go: `api.ParseCurl`
 
 `internal/api/curl.go` holds the same arrangement for the API tab. A `curl`
 line in, a `Request` out — shell quoting, backslash continuations, flags that
@@ -85,8 +109,9 @@ pointing in opposite directions, after query string, SQL values and the JS
 literal.
 
 The red loop is kept out of the default suite, so that `go test ./...` stays
-green while it is unwritten — the same reason the six JavaScript stubs live
-behind `-test-scripts` rather than in the Go tests:
+green while it is unwritten — the same reason the JavaScript fixtures live
+behind `-test-scripts` rather than in the Go tests, back when six of them were
+red:
 
 ```bash
 QUICKTOOLS_TODO=1 go test ./internal/api/ -run ParseCurl -v
@@ -95,9 +120,11 @@ QUICKTOOLS_TODO=1 go test ./internal/api/ -run ParseCurl -v
 Without the variable those three tests skip, printing why. Nothing depends on
 it: the tab is complete without it.
 
-The same instinct generalises: when a task has a genuinely interesting
-algorithmic core (parser, scheduler, diff, solver), ask before implementing it.
-Build all the mechanical parts fully — those were never the point.
+The same instinct generalises, and the six JavaScript scripts do not weaken it:
+when a task has a genuinely interesting algorithmic core (parser, scheduler,
+diff, solver), **ask before implementing it**, and build all the mechanical
+parts fully — those were never the point. Asking is what happened on
+2026-10-20; the answer was yes, which is a different thing from not asking.
 
 ---
 
@@ -1123,7 +1150,9 @@ Two things to know if this is ever revisited:
 
 ## Next steps
 
-1. The six reserved parsers in `scripts/` are the user's to write. Do not.
+1. `scripts/` is finished — all seven transforms are written and
+   `-test-scripts` is 116 green. `api.ParseCurl` is the one parser still
+   reserved for the user; see "Still reserved, in Go" above.
 2. Notes are stored in plain text -- the same exposure as Win+V, organised
    rather than safer. DPAPI encryption for files marked secret is the obvious
    next thing if it is ever wanted.

@@ -79,15 +79,17 @@ grep -A3 '"the class from the readme"' scripts/java-to-json.test.json
 
 ---
 
-# The stubs
+# The seven transforms
 
-Six scripts are yours to write. All have fixtures and all are currently red.
-
-They ladder in difficulty — doing them roughly in this order means each one
-uses a skill the previous one built:
+All seven are written and all their fixtures are green. Six of them were
+reserved for the user as an exercise and were filled in on 2026-10-20 at their
+explicit request — if you are reading this to learn from them, read them in the
+ladder order below, which is the order they were meant to be written in: each
+one uses a skill the previous one built.
 
 | # | Script | Teaches |
 |---|---|---|
+| 0 | `java-to-json.js` | scanning text where comments and literals hide the delimiters |
 | 1 | `query-string-to-json.js` | normalising messy input; repeated keys becoming arrays |
 | 2 | `json-to-query-string.js` | the reverse — flattening a tree into one key per leaf |
 | 3 | `json-to-insert-query.js` | writing for a target with its own quoting rules |
@@ -95,20 +97,32 @@ uses a skill the previous one built:
 | 5 | `js-object-to-json.js` | recursive descent over a bracketed grammar |
 | 6 | `json-to-js.js` | the reverse, and why `JSON.parse` cannot be used |
 
-**`java-to-json.js` is written**, and is the worked example to copy the shape
-from. It is the same scan-and-decide structure the rest want: consume the things
-that can hide a delimiter (comments, string literals, annotations) inside the
-scanner so nothing downstream has to think about them, keep one counter for
-depth, and build the result as a value that `JSON.stringify` renders rather than
-as text you concatenate.
-
-None of these duplicate a built-in, so nothing stops working while they are
-unwritten — each is a new capability the tool does not have yet.
+`java-to-json.js` is the one to read first, and the shape the rest follow:
+consume the things that can hide a delimiter (comments, string literals,
+annotations) inside the scanner so nothing downstream has to think about them,
+keep one counter for depth, and build the result as a value that
+`JSON.stringify` renders rather than as text you concatenate.
 
 Three of them are pairs pointing in opposite directions: query string, SQL
-values, and JS literal. Write a pair together. Reading a format teaches you
-where its edges are, and the fixtures of one direction are largely the outputs
-of the other, so the second of a pair is always faster than the first.
+values, and JS literal. Reading a format teaches you where its edges are, and
+the fixtures of one direction are largely the outputs of the other, which is why
+each pair shares most of its test data.
+
+None of them duplicates a built-in — each was a capability the tool did not have.
+
+## What is duplicated, and why it has to be
+
+`readJson` — the strict JSON reader that keeps every number as its source text
+— appears **verbatim in four files**: `json-to-query-string.js`,
+`json-to-insert-query.js`, `json-to-update-query.js` and `json-to-js.js`. The
+SQL pair additionally shares `rowOf`, `snake`, `sqlValue` and `compact`.
+
+That is forced. The engine compiles each file on its own with no `require` and
+no `import`, and **every `.js` in this folder becomes a palette entry**, so a
+shared `_lib.js` would appear in the palette as a transform. Editing the reader
+means editing it in four places; the fixtures will tell you if you miss one. If
+that ever becomes a real cost, the answer is to move the shared half into a Go
+built-in, not to invent an include mechanism.
 
 ## Shared rules
 
@@ -372,6 +386,19 @@ The input is nearly JSON already. What it adds:
 { a: 1 // n
 }                   line comments
 ```
+
+### An unescaped quote is recovered, not rejected
+
+```js
+{a: 'it's'}
+```
+
+That is not valid JavaScript, and it is exactly what a careless copy produces.
+So a quote only ends a string when what follows it could follow a value — a
+comma, a closing bracket, a colon, or the end of the input. Here the text after
+the middle quote is `s'`, which is none of those, so the quote is content and
+the value comes out as `it's`. A fixture pins it. The lookahead costs nothing in
+the normal case, where the next thing really is a comma or a brace.
 
 ### Do not use `eval`
 

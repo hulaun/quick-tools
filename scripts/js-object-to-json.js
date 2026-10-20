@@ -1,42 +1,267 @@
 // JavaScript object literal  ->  JSON
 //
-// YOURS TO WRITE.  Difficulty: 6 of 7.
+//     { a: 1, b: 'x', /* note */ c: [1, 2,], }
 //
-// Fixtures are in js-object-to-json.test.json and the rules are in README.md.
+//     ->  { "a": 1, "b": "x", "c": [1, 2] }
 //
-// This is the first of the two real parsers, and the easier one: the input is
-// already very close to JSON. What it adds is:
+// The input is nearly JSON already. What it adds is unquoted keys, single
+// quotes, trailing commas and comments -- so this is the classic
+// recursive-descent set over a grammar that is JSON's with four relaxations.
 //
-//     unquoted keys        { a: 1 }
-//     single quotes        { a: 'x' }
-//     trailing commas      { a: 1, }
-//     comments             { /* note */ a: 1 }  and  { a: 1 // note
+// NOT eval, and not new Function("return " + input). This runs against whatever
+// happens to be on the clipboard, and both of those EXECUTE it, so copying the
+// wrong snippet would run it with your privileges. A parser that only reads the
+// text cannot be made to run anything, and it is barely more work. One fixture
+// exists to catch the shortcut:
 //
-// A tempting shortcut is eval(), or `new Function("return " + input)`. Do not.
-// This runs against whatever happens to be on your clipboard, and both of those
-// execute it. A parser that reads the text is barely more work and cannot be
-// made to run anything.
+//     {a: (function(){ return 1 })()}
 //
-// The structure is the classic recursive descent pair:
+// A parser rejects that, because "(" is not a valid start to a value, while
+// eval returns {a: 1} and passes every other test.
 //
-//     parseValue()   look at the next character, dispatch to the right reader
-//     parseObject()  '{' then key : value pairs then '}'
-//     parseArray()   '[' then values then ']'
-//     parseString()  a quote, then characters until the matching quote
-//     parseNumber()  digits, and the things that can appear in a number
-//
-// Each one consumes from a shared position and returns a value; nesting falls
-// out of them calling each other. Keep a single index into the string and a
-// skipWhitespace() that also skips comments -- doing that in one place is what
-// keeps the rest readable.
+// Comment-skipping lives inside skipWhitespace, which is called between every
+// token. That is what keeps the rest of the functions short -- the alternative
+// is remembering to check for a comment in a dozen separate places.
 
 var name = "Js object to json";
 var group = "Json";
 var tags = ["js", "jsobject", "literal", "json5"];
 
 function transform(input) {
-    // TODO: replace this with a real parser.
-    throw new Error("not implemented yet: see scripts/README.md");
+    if (!/\S/.test(input)) {
+        throw new Error("nothing to convert");
+    }
+    return JSON.stringify(parse(input), null, 2);
+}
 
-    // return JSON.stringify(parse(input), null, 2);
+function parse(src) {
+    var pos = 0;
+
+    function fail(msg) {
+        throw new Error(msg + " at character " + (pos + 1));
+    }
+
+    function peek() {
+        return pos < src.length ? src.charAt(pos) : "";
+    }
+
+    // skipWhitespace also eats comments, so everything downstream can treat a
+    // comment as if it were a space.
+    function skipWhitespace() {
+        for (;;) {
+            while (pos < src.length && /\s/.test(src.charAt(pos))) {
+                pos++;
+            }
+            if (src.charAt(pos) === "/" && src.charAt(pos + 1) === "/") {
+                while (pos < src.length && src.charAt(pos) !== "\n") {
+                    pos++;
+                }
+                continue;
+            }
+            if (src.charAt(pos) === "/" && src.charAt(pos + 1) === "*") {
+                var end = src.indexOf("*/", pos + 2);
+                if (end < 0) {
+                    fail("unterminated block comment");
+                }
+                pos = end + 2;
+                continue;
+            }
+            return;
+        }
+    }
+
+    // value dispatches on the next character. Nesting falls out of these
+    // functions calling each other: array calls value, which may call object,
+    // which calls value again.
+    function value() {
+        skipWhitespace();
+        var c = peek();
+        if (c === "") fail("unexpected end of input");
+        if (c === "{") return object();
+        if (c === "[") return array();
+        if (c === '"' || c === "'") return string();
+        if (c === "-" || c === "+" || c === "." || (c >= "0" && c <= "9")) return number();
+        if (/[A-Za-z_$]/.test(c)) {
+            var word = identifier();
+            if (word === "true") return true;
+            if (word === "false") return false;
+            if (word === "null") return null;
+            // undefined, NaN, a variable name, a function call -- all things a
+            // JavaScript engine could evaluate and a converter cannot.
+            fail("cannot convert " + JSON.stringify(word) + " to JSON");
+        }
+        fail("unexpected " + JSON.stringify(c));
+    }
+
+    function object() {
+        pos++; // {
+        var out = {};
+        skipWhitespace();
+        if (peek() === "}") {
+            pos++;
+            return out;
+        }
+        for (;;) {
+            skipWhitespace();
+            var key;
+            var c = peek();
+            if (c === '"' || c === "'") {
+                key = string();
+            } else if (/[A-Za-z_$]/.test(c)) {
+                key = identifier();
+            } else if (c >= "0" && c <= "9") {
+                key = String(number()); // { 1: "x" } is legal
+            } else {
+                fail("expected a key");
+            }
+
+            skipWhitespace();
+            if (peek() !== ":") {
+                fail('expected ":" after the key');
+            }
+            pos++;
+            out[key] = value();
+
+            skipWhitespace();
+            c = peek();
+            if (c === ",") {
+                pos++;
+                skipWhitespace();
+                if (peek() === "}") {
+                    pos++; // a trailing comma
+                    return out;
+                }
+                continue;
+            }
+            if (c === "}") {
+                pos++;
+                return out;
+            }
+            fail('expected "," or "}"');
+        }
+    }
+
+    function array() {
+        pos++; // [
+        var out = [];
+        skipWhitespace();
+        if (peek() === "]") {
+            pos++;
+            return out;
+        }
+        for (;;) {
+            out.push(value());
+            skipWhitespace();
+            var c = peek();
+            if (c === ",") {
+                pos++;
+                skipWhitespace();
+                if (peek() === "]") {
+                    pos++; // a trailing comma
+                    return out;
+                }
+                continue;
+            }
+            if (c === "]") {
+                pos++;
+                return out;
+            }
+            fail('expected "," or "]"');
+        }
+    }
+
+    // string reads either quoting style.
+    //
+    // The awkward part is an unescaped quote inside the string: 'it's' is not
+    // valid JavaScript, but it is what a careless copy produces and throwing it
+    // away would be unhelpful. So a quote only ends the string when what
+    // follows it could follow a value; otherwise it is content. That turns
+    // 'it's' into "it's" rather than an error, and costs nothing in the normal
+    // case, where the next thing really is a comma or a brace.
+    function string() {
+        var quote = src.charAt(pos);
+        pos++;
+        var out = "";
+        for (;;) {
+            if (pos >= src.length) {
+                fail("unterminated string");
+            }
+            var c = src.charAt(pos);
+            if (c === "\\") {
+                out += escaped();
+                continue;
+            }
+            if (c === quote) {
+                if (terminates(pos + 1)) {
+                    pos++;
+                    return out;
+                }
+                out += c;
+                pos++;
+                continue;
+            }
+            out += c;
+            pos++;
+        }
+    }
+
+    // terminates reports whether the position after a closing quote is a place
+    // a value can end. It looks ahead without consuming, so the caller is free
+    // to carry on reading the string.
+    function terminates(at) {
+        var save = pos;
+        pos = at;
+        skipWhitespace();
+        var c = peek();
+        pos = save;
+        return c === "" || c === "," || c === "}" || c === "]" || c === ":";
+    }
+
+    function escaped() {
+        var e = src.charAt(pos + 1);
+        pos += 2;
+        if (e === "n") return "\n";
+        if (e === "t") return "\t";
+        if (e === "r") return "\r";
+        if (e === "b") return "\b";
+        if (e === "f") return "\f";
+        if (e === "v") return "\v";
+        if (e === "0") return "\0";
+        if (e === "\n") return ""; // a line continuation
+        if (e === "u" || e === "x") {
+            var width = e === "u" ? 4 : 2;
+            var hex = src.substr(pos, width);
+            if (hex.length === width && /^[0-9a-fA-F]+$/.test(hex)) {
+                pos += width;
+                return String.fromCharCode(parseInt(hex, 16));
+            }
+            return e; // not an escape after all
+        }
+        return e; // the quote escapes, the backslash, the slash, anything else
+    }
+
+    function number() {
+        var m = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?/.exec(src.slice(pos));
+        if (!m) {
+            fail("expected a number");
+        }
+        pos += m[0].length;
+        return Number(m[0]);
+    }
+
+    function identifier() {
+        var m = /^[A-Za-z_$][A-Za-z0-9_$]*/.exec(src.slice(pos));
+        if (!m) {
+            fail("expected a name");
+        }
+        pos += m[0].length;
+        return m[0];
+    }
+
+    var root = value();
+    skipWhitespace();
+    if (pos < src.length) {
+        fail("unexpected text after the value");
+    }
+    return root;
 }
