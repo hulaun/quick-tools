@@ -34,6 +34,7 @@ const (
 	cmdAutoPaste uint16 = 101
 	cmdAutostart uint16 = 102
 	cmdQuit      uint16 = 103
+	cmdPin       uint16 = 104
 )
 
 // tray owns the notification-area icon.
@@ -143,6 +144,12 @@ func (p *Palette) showTrayMenu() {
 	}
 	winapi.AppendMenu(uintptr(menu), autoPasteFlags, cmdAutoPaste, "Paste automatically")
 
+	pinFlags := uint32(winapi.MFString | winapi.MFUnchecked)
+	if p.cfg.Pinned {
+		pinFlags = winapi.MFString | winapi.MFChecked
+	}
+	winapi.AppendMenu(uintptr(menu), pinFlags, cmdPin, "Keep palette open (pin on top)")
+
 	autostartFlags := uint32(winapi.MFString | winapi.MFUnchecked)
 	if winapi.AutostartEnabled() {
 		autostartFlags = winapi.MFString | winapi.MFChecked
@@ -176,6 +183,11 @@ func (p *Palette) onTrayCommand(cmd uint16) {
 		if err := config.Save(p.cfg); err != nil {
 			p.fatal("Could not save settings", err)
 		}
+	case cmdPin:
+		p.cfg.Pinned = !p.cfg.Pinned
+		if err := config.Save(p.cfg); err != nil {
+			p.fatal("Could not save settings", err)
+		}
 	case cmdAutostart:
 		var err error
 		if winapi.AutostartEnabled() {
@@ -205,6 +217,7 @@ func (p *Palette) trayEvents() {
 
 	p.wnd.On().WmCommand(cmdOpen, co.CMD_MENU, func() { p.onTrayCommand(cmdOpen) })
 	p.wnd.On().WmCommand(cmdAutoPaste, co.CMD_MENU, func() { p.onTrayCommand(cmdAutoPaste) })
+	p.wnd.On().WmCommand(cmdPin, co.CMD_MENU, func() { p.onTrayCommand(cmdPin) })
 	p.wnd.On().WmCommand(cmdAutostart, co.CMD_MENU, func() { p.onTrayCommand(cmdAutostart) })
 	p.wnd.On().WmCommand(cmdQuit, co.CMD_MENU, func() { p.onTrayCommand(cmdQuit) })
 }

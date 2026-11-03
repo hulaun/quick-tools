@@ -150,25 +150,41 @@ parts fully — those were never the point. Asking is what happened on
   Misc. `go test ./...` is green.
 - `internal/ui` — the palette: dark theme, Segoe UI, DWM rounded corners,
   accent highlight, live preview. `internal/fuzzy` ranks entries.
-- **The window is glass.** It sits on a real acrylic blur -- the desktop behind
-  it, blurred and tinted by `acrylicTint` -- and the window background and the two lists let it through
-  while the search box and every pane holding text stay solid over it. The
-  highlighted row is a rounded pill rather than a full-width bar, and the
-  scrollbars are drawn by the app -- no arrow buttons, a track the colour of
-  whatever is behind it, a rounded thumb over the content. None of the three
-  came free; gotchas 46 to 55 are why. The acrylic in particular is not any of
-  the documented DWM calls: both of those were tried and neither works on a GDI
-  window. Corner radii come in two scales -- the chrome you aim at is a capsule,
-  the panels you read out of are barely rounded -- and they are rounded by
-  painting the corners out rather than by clipping, which is the only thing that
-  works (gotcha 53).
-- **Selected text is grey, and that is what decides the caret's colour.** A
-  plain edit paints its selection in the system highlight -- the Windows accent,
-  blue here -- and no message changes that, so it is recoloured afterwards in
-  the pass that is already setting the alpha (`winapi.Selection`, and
-  `colTextSel`). The reason is the caret: Windows draws one by inverting the
-  pixels under it, so over blue it came out orange. Over the grey it comes out
-  #c5c5c5, which is what it looks like everywhere else. Gotcha 55.
+- **The window is flat and opaque -- zinc dark.** Three values carry the depth:
+  the window and the list behind the rows (#09090b), the panels you read and
+  type in (#18181b), and the highlighted row and active tab (#27272a), with a
+  one-pixel #27272a border doing the work of separating the window from the
+  wallpaper. Text is #fafafa over #a1a1aa. All of it is the colour block at the
+  top of `theme.go` and nothing else decides a colour.
+
+  **It was glass until 2026-10-27**, sitting on a real acrylic blur through the
+  undocumented `SetWindowCompositionAttribute`. That worked, and it is gone, at
+  the user's decision: GDI has no alpha channel, so holding a control solid over
+  the material meant copying its pixels out, setting the alpha byte and copying
+  them back after every paint -- and that pass can only run *after* the control
+  has painted, which a control dragging out a selection does without a
+  `WM_PAINT` at all. A composition frame landing in the gap showed the backdrop
+  through the selected lines. Gotcha 59 is the whole account; `winapi/acrylic.go`
+  and `winapi/opaque.go` were deleted with it, and so was most of what is now
+  `internal/ui/surface.go`.
+
+  The rest of the look is unchanged and none of it came free. The highlighted row
+  is a rounded pill rather than a full-width bar, and the scrollbars are drawn by
+  the app -- no arrow buttons, a track the colour of whatever is behind it, a
+  rounded thumb over the content (gotchas 46 and 49 to 51). Corner radii come in
+  two scales -- the chrome you aim at is a capsule, the panels you read out of
+  are barely rounded -- and they are rounded by painting the corners out rather
+  than by clipping, which is the only thing that works (gotcha 53).
+- **Selected text is the system highlight, and the caret over it is orange.**
+  A plain edit paints its selection in the Windows accent and no message
+  changes that -- the colours `WM_CTLCOLOREDIT` hands back are the unselected
+  pair. It was recoloured to a grey afterwards until 2026-10-27, so that the
+  caret -- which Windows draws by inverting the pixels under it -- kept its
+  colour instead of coming out #ff872b. That is gone, and **this is the one
+  thing the flat theme did not fix**: a recolour can only ever land after the
+  control has painted the blue, and at the speed a mouse drag repaints you see
+  both. The only real fix is drawing the text ourselves, which is a milestone
+  and not a colour. Gotchas 55 and 59.
 - `cmd/quicktools` — the real app.
 - Tray icon with a context menu: open, toggle auto-paste (persisted), toggle
   start-with-Windows, quit. **Start-with-Windows is opt-in and off by default**
@@ -332,15 +348,12 @@ parts fully — those were never the point. Asking is what happened on
   lives outside the region the control is clipped to, so the transition happens
   where nobody can see it and the client width the rows lay out in never
   changes. That was a side effect rather than the goal; see gotcha 46.
-- **A line of a pane flashing pale while a selection is dragged out** was
-  reported on 2026-09-07 and is addressed by gotcha 56, but the diagnosis is a
-  measurement rather than a sighting: the acrylic behind a pane measures #565656
-  over a bright window against the pane's own #1c1c1c, so a line that loses its
-  alpha for a frame is exactly that pale. If it still happens, the remaining
-  suspect is a compositor frame landing between the control's paint and the
-  alpha repaint, which no amount of re-asserting afterwards can close -- that
-  would mean buffering the control's paint instead, and only then is it worth
-  the risk.
+- **Resolved 2026-10-27 by the theme going flat.** A pane flashing pale while a
+  selection was dragged out, with a hitch alongside it -- reported 2026-09-07
+  and again 2026-10-27. It was two bugs wearing the same face, a colour
+  correction and an alpha correction, and both were artefacts of painting over
+  an acrylic backdrop with an API that has no alpha channel. There is no
+  backdrop now and no second pass, so neither can happen. Gotcha 59.
 - **Resolved, or never true at 750x500.** A screenshot taken on 2026-09-03 after
   the window resize shows "Search transforms" rendering correctly. Nothing was
   changed to fix it, so if it reappears, note what the window size was.
@@ -452,15 +465,14 @@ cmd/quicktools/     the real app -- the only command
 bin/quicktools.exe  the build output (gitignored)
 internal/winapi/    Win32: hotkey, clipboard, focus, sendinput, DPI, theming;
                     hook.go (WH_KEYBOARD_LL), sendkeys.go (macro replay),
-                    acrylic.go (the blur behind), opaque.go (the alpha
-                    repaint), capture.go (mouse capture)
+                    capture.go (mouse capture)
 internal/transform/ built-in transforms + registry
 internal/ui/        palette.go (window, modes, keys), notes.go (notes mode),
                     command.go (remembered queries, the ">" tab switcher),
                     macros.go (record, replay, the undo watch),
                     api.go + api_edit.go (API mode), editing.go (word delete),
                     theme.go (colours, fonts, chrome),
-                    glass.go (what is solid and what is backdrop),
+                    surface.go (what each control does after it paints),
                     scrollbar.go (the overlay scrollbar)
 internal/fuzzy/     ranked search over the palette entries
 internal/config/    %APPDATA%\quick-tools\config.json
@@ -503,10 +515,12 @@ Deliberately avoided: `golang.design/x/hotkey` (we own a message loop already),
 - **Layout and colour live in one place each**: the constants block at the top
   of `internal/ui/palette.go`, and the colour vars at the top of
   `internal/ui/theme.go`. Nothing else hardcodes a position or a colour. The
-  user edits these directly — keep it that way. Two of the colours are
-  structural rather than decorative and say so in a comment: `colGlass` is black
-  because black is what the compositor reads as transparent, and `colSurface` is
-  whatever it likes so long as it is not black (gotcha 47).
+  user edits these directly — keep it that way. **None of the colours is
+  structural any more.** Two of them were while the window was glass: the
+  background had to be black, because black is what the compositor reads as
+  "show the material", which is why the window and the list could not be
+  different colours. That constraint went with the acrylic on 2026-10-27 and
+  every value is now a free choice (gotchas 47 and 59).
 - **The `Transform` struct is the single abstraction** *for transforms*.
   Built-ins and JS scripts both become a `Transform`, so the palette, fuzzy
   index and preview pane never know which is which. Keep it that way — it is
@@ -894,6 +908,12 @@ the client width** (that is `contentWidth`, not `SetWidthToFill`), and a
 multiline edit needs `EM_SETRECT` or it will happily wrap text into the part
 nobody can see.
 
+> **History, as of 2026-10-27.** The acrylic was removed and the window is flat
+> and opaque; nothing below is live code any more. It is kept because it is the
+> only written record of what does and does not work, and because every word of
+> it comes back the day anyone tries glass on a GDI window again. Gotcha 59 is
+> why it went.
+
 **47. Neither documented route puts acrylic behind a GDI window.** Both were
 tried, and the second one wasted the most time because it looks like it works:
 
@@ -947,8 +967,8 @@ panics with "Cannot subclass a control after it is created", so anything hung
 off `OnSubclass()` belongs in `events()` and not in `applyLook`, which runs on
 first show. That is the opposite of the rule for *styling*, which must wait for
 `applyLook` because the handles do not exist during `WM_CREATE` (gotcha 10). The
-scrollbar and the glass are split across both for exactly this reason: the
-handlers are wired early, the widening and the region are applied late.
+scrollbar is split across both for exactly this reason: the handlers are wired
+early in `events()`, the widening and the region late in `applyLook`.
 
 **49. A list view row highlight cannot be rounded through `ClrTextBk`.** The
 control fills the row rectangle with that colour, and a row rectangle is the
@@ -1006,12 +1026,12 @@ four triangles the rounded shape leaves over with the window background. That
 was the clue all along: the highlighted row was the one rounded thing in this
 window that was never in doubt, and it is the one nothing was asked to clip.
 
-Two things follow. The mask has to run **after** the alpha repaint, because
-those pixels are meant to stay transparent and show the acrylic like the window
-around them, and `MakeOpaque` would otherwise have just made them solid. And the
-*window itself* cannot be rounded this way at all: the acrylic is drawn behind
-the whole window rectangle, so painting a corner transparent shows more acrylic
-rather than less. `DWMWCP_ROUND`'s fixed 8 is as round as the palette gets.
+One thing follows: the *window itself* cannot be rounded this way at all.
+Painting a corner out needs something behind it to paint the corner *to*, and
+the window has only the desktop. `DWMWCP_ROUND`'s fixed 8 is as round as the
+palette gets. (While the window was glass there was a second rule here -- the
+mask had to run after the alpha repaint, or those corners came out solid instead
+of transparent. That went with the acrylic.)
 
 **54. `CreateRoundRectRgn` and `RoundRect` take an ellipse, not a radius.** The
 last two arguments are the width and height of the ellipse the corner is cut
@@ -1031,6 +1051,12 @@ in `theme.go` and in `palette.go`'s constants block is a real radius; the two
 call sites that talk to GDI directly (`drawRow`, and the scrollbar thumb, whose
 ellipse is its full width so the ends come out as semicircles) say so where they
 do the conversion.
+
+> **History, as of 2026-10-27.** The acrylic was removed and the window is flat
+> and opaque; nothing below is live code any more. It is kept because it is the
+> only written record of what does and does not work, and because every word of
+> it comes back the day anyone tries glass on a GDI window again. Gotcha 59 is
+> why it went.
 
 **55. A caret has no colour of its own -- it is whatever it stands on, inverted.**
 So the only way to decide what the caret looks like is to decide what is behind
@@ -1060,6 +1086,17 @@ colour means a selection background whose inverse is the same near-white the
 caret already is over the panes -- which means a grey close to the surface.
 Choose a blue there and the orange caret comes straight back.
 
+**All of the above is kept as history: the recolour was removed on 2026-10-27
+and the caret is orange again over a selection.** Gotcha 59 is why. `remapRow`
+and `winapi.Selection` are still there and still tested, and `MakeOpaque` is
+simply passed `nil`.
+
+> **History, as of 2026-10-27.** The acrylic was removed and the window is flat
+> and opaque; nothing below is live code any more. It is kept because it is the
+> only written record of what does and does not work, and because every word of
+> it comes back the day anyone tries glass on a GDI window again. Gotcha 59 is
+> why it went.
+
 **56. A control does not do all of its painting in `WM_PAINT`.** An edit
 dragging out a selection redraws as the pointer moves, and what it draws that
 way never reaches the paint hook -- so it is neither made opaque nor recoloured,
@@ -1067,10 +1104,12 @@ and the line shows the acrylic through until the next real paint arrives. Over a
 bright window behind the palette the backdrop measures #565656 against the
 pane's #1c1c1c, which is what "the line goes white for a moment" is.
 
-`refreshSurface` re-asserts both after the mouse and key messages the control
-handles for itself. It is guarded on there being a selection at all, so the
-common case -- every keystroke, every mouse move over a pane -- costs one
-message and an `EM_GETSEL`.
+`refreshSurface` re-asserts the alpha after the mouse and key messages the
+control handles for itself. Three things keep it cheap, and gotcha 59 is what
+each of them is for: it remembers the selection per control and returns at once
+if it has not moved, it covers only the band the selection is in
+(`selectionBand`, from `EM_POSFROMCHAR`) rather than the whole client area, and
+it writes straight to the control rather than invalidating.
 
 The wiring is the fiddly part: windigo keeps only the **last** handler
 registered for a message, so a second `WM_MOUSEMOVE` handler would silently
@@ -1078,6 +1117,12 @@ replace the scrollbar's. That is why `wireScrollDrag` takes the refresh as a
 callback instead of it being registered alongside, and why the keys are left
 alone -- `palette.go` already owns `WM_KEYDOWN` on all four edits, and
 `WM_KEYUP`, which nothing wants, is what the refresh hangs off instead.
+
+> **History, as of 2026-10-27.** The acrylic was removed and the window is flat
+> and opaque; nothing below is live code any more. It is kept because it is the
+> only written record of what does and does not work, and because every word of
+> it comes back the day anyone tries glass on a GDI window again. Gotcha 59 is
+> why it went.
 
 **57. `HideCaret` before copying pixels out, or the caret is copied with them.**
 The caret is drawn by inverting, so a copy that catches one blink of it takes
@@ -1102,6 +1147,56 @@ are now skipped as comments, the same convention `places.json` already carries
 the decoder is a stream and skipping a token would leave it in the middle of a
 value. And there is a test that loads the checked-in template itself. Any file
 shipped as a starting point should have one.
+
+**59. A colour corrected after the fact is a colour that gets seen.** Dragging a
+selection out with the mouse hitched, and the window flashed pale, several times
+a second -- reported on 2026-10-27, and the diagnosis is the user's: the flash
+is the moment the selection goes from the blue the control painted to the grey
+`MakeOpaque` rewrote it as. Slowly it barely shows; quickly it shows on every
+repaint.
+
+There is no ordering that fixes that. The blue is the control's own painting and
+it always goes down first, so the grey can only ever be a second frame. The
+recolour was therefore removed, and the alpha pass was left changing no colours
+at all. When a correction cannot be made to happen before the thing it corrects,
+the question is whether the correction is worth more than seeing it happen --
+here an orange caret was worth less than a flashing window.
+
+Two measurements from the same bug are worth keeping, because both were costs
+nobody had added up:
+
+- The pass covered the **whole client area** of a pane -- about 700x630 physical
+  pixels at 150% -- on **every** `WM_MOUSEMOVE`, of which a drag delivers around
+  a hundred a second. That is a DIB allocated and freed, two full-pane BitBlts
+  and two passes over every pixel, a hundred times a second. `selectionBand`
+  now narrows it to the lines the selection is on.
+- Invalidating instead of writing directly is **not** the cheap option here, and
+  that was the first thing tried. `WS_EX_COMPOSITED` (gotcha 12) renders the
+  whole hierarchy into one buffer, so invalidating any one child is a repaint of
+  every control in the window. For two lines of one pane that is far more work
+  than the blit it was meant to avoid.
+
+**And then the acrylic went, which is the real end of this.** Dropping the
+recolour fixed the colour flash and left an alpha one: the pane's selected lines
+still showed the backdrop for a frame, because the control's own paint always
+lands before the pass that fixes its alpha and a composition frame can land
+between the two. That gap cannot be closed from our side -- we only ever get to
+act *after* a control has painted, and a drag repaint never reaches our hook at
+all (gotcha 56).
+
+So on 2026-10-27 the theme went flat and opaque instead, and the whole
+dependency came out with it: `winapi/acrylic.go`, `winapi/opaque.go`, the alpha
+repaint, the selection remap, `refreshSurface` and most of `glass.go`, which is
+now `surface.go` and does three small jobs that have nothing to do with
+transparency. The flash cannot happen because there is no second pass to miss.
+
+The lesson is the one worth carrying: **the bug was not in the workaround, it
+was in needing one.** Four gotchas (47, 47a, 55, 56) and two source files
+existed to make GDI behave like a compositor with an alpha channel, and each one
+was individually correct. The cheapest fix in the end was to stop wanting the
+thing GDI cannot do. If glass is ever wanted again, the honest route is the one
+gotcha 47 names -- DirectComposition, and drawing the text ourselves -- not
+another pass over the pixels.
 
 ---
 

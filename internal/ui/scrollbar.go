@@ -206,10 +206,9 @@ func thumbRect(h win.HWND) (rc win.RECT, ok bool) {
 // paintScrollbar repaints the column the overlay lives in and, if there is
 // anything to scroll, the thumb.
 //
-// fill is what is behind the strip: the glass background for a list, the panel
-// surface for an editor. On a solid panel the thumb ends up opaque along with
-// the rest of it, because wireSurface includes the strip in the rectangle whose
-// alpha it repaints; on a list it stays glass like the rows it floats over.
+// fill is what is behind the strip: the window background for a list, the panel
+// surface for an editor -- so the thumb reads as floating over the pane's own
+// panel in one case and over the window in the other.
 func (t *theme) paintScrollbar(h win.HWND, fill win.HBRUSH) {
 	hdc, err := h.GetDC()
 	if err != nil {
@@ -217,9 +216,7 @@ func (t *theme) paintScrollbar(h win.HWND, fill win.HBRUSH) {
 	}
 
 	strip := stripRect(h)
-	hdc.FillRect(&win.RECT{
-		Left: strip.Left, Top: strip.Top, Right: strip.Right, Bottom: strip.Bottom,
-	}, fill)
+	hdc.FillRect(&strip, fill)
 
 	rc, ok := thumbRect(h)
 	if ok {
@@ -244,13 +241,13 @@ func (t *theme) paintScrollbar(h win.HWND, fill win.HBRUSH) {
 // old position is still valid and would be left behind. Erasing the column is
 // what removes it, and it costs nothing: contentWidth keeps rows and text out
 // of there, so nothing else has anything to draw in it.
-func stripRect(h win.HWND) winapi.Rect {
+func stripRect(h win.HWND) win.RECT {
 	client, err := h.GetClientRect()
 	if err != nil {
-		return winapi.Rect{}
+		return win.RECT{}
 	}
 	right := visibleWidth(h)
-	return winapi.Rect{
+	return win.RECT{
 		Left:   int32(right - ui.DpiX(sbThumbPad*2+sbThumbW)),
 		Top:    0,
 		Right:  int32(right),
@@ -259,14 +256,14 @@ func stripRect(h win.HWND) winapi.Rect {
 }
 
 // wireScrollDrag makes the thumb draggable. The painting is not here: it hangs
-// off the single WM_PAINT hook in wireSurface, which has to sequence it against
-// the alpha repaint.
+// off the single WM_PAINT hook in wireSurface, which sequences it against the
+// corner mask.
 //
-// after, which may be nil, runs on every one of these that reaches the control
-// -- it is wireSurface's alpha and selection repaint, and it is passed in
-// rather than registered alongside because windigo keeps only the last handler
-// registered for a message.
-func (p *Palette) wireScrollDrag(c subclassable, after func(win.HWND)) {
+// Note that windigo keeps only the **last** handler registered for a message,
+// so these three own WM_LBUTTONDOWN, WM_MOUSEMOVE and WM_LBUTTONUP on a
+// scrolling control outright. Anything else that wants one of them has to be
+// called from in here rather than registered beside it.
+func (p *Palette) wireScrollDrag(c subclassable) {
 	c.OnSubclass().Wm(co.WM_LBUTTONDOWN, func(m ui.Wm) uintptr {
 		h := c.Hwnd()
 		x, y := mousePos(m.LParam)
@@ -274,11 +271,7 @@ func (p *Palette) wireScrollDrag(c subclassable, after func(win.HWND)) {
 		// Outside the strip, or a strip with no thumb in it, is an ordinary
 		// click on the content and has to reach the control.
 		if !ok || x < int(rc.Left)-ui.DpiX(sbThumbPad) || x > int(rc.Right)+ui.DpiX(sbThumbPad) {
-			r := h.DefSubclassProc(co.WM_LBUTTONDOWN, m.WParam, m.LParam)
-			if after != nil {
-				after(h)
-			}
-			return r
+			return h.DefSubclassProc(co.WM_LBUTTONDOWN, m.WParam, m.LParam)
 		}
 		grab := y - int(rc.Top)
 		if y < int(rc.Top) || y > int(rc.Bottom) {
@@ -295,11 +288,7 @@ func (p *Palette) wireScrollDrag(c subclassable, after func(win.HWND)) {
 	c.OnSubclass().Wm(co.WM_MOUSEMOVE, func(m ui.Wm) uintptr {
 		h := c.Hwnd()
 		if p.sbDrag.hwnd != h {
-			r := h.DefSubclassProc(co.WM_MOUSEMOVE, m.WParam, m.LParam)
-			if after != nil {
-				after(h)
-			}
-			return r
+			return h.DefSubclassProc(co.WM_MOUSEMOVE, m.WParam, m.LParam)
 		}
 		_, y := mousePos(m.LParam)
 		p.scrollTo(h, y)
@@ -309,11 +298,7 @@ func (p *Palette) wireScrollDrag(c subclassable, after func(win.HWND)) {
 	c.OnSubclass().Wm(co.WM_LBUTTONUP, func(m ui.Wm) uintptr {
 		h := c.Hwnd()
 		if p.sbDrag.hwnd != h {
-			r := h.DefSubclassProc(co.WM_LBUTTONUP, m.WParam, m.LParam)
-			if after != nil {
-				after(h)
-			}
-			return r
+			return h.DefSubclassProc(co.WM_LBUTTONUP, m.WParam, m.LParam)
 		}
 		p.sbDrag = scrollDrag{}
 		winapi.ReleaseCapture()

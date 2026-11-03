@@ -19,47 +19,43 @@ import (
 // painting one. Any real colour draws a one-pixel line around the window.
 const colNoBorder win.COLORREF = 0xffff_fffe
 
-// Colours.
+// Colours: a flat dark theme, zinc.
 //
-// A dark surface set close to the Windows 11 palette. Change these and rebuild;
-// they are the only place colour is decided.
+// Change these and rebuild; they are the only place colour is decided, and
+// since the window became opaque (see applyChrome) none of them is structural
+// any more -- every one is a free choice.
 //
-// Two of them are structural rather than decorative and are commented as such:
-// colGlass is black *because* black is what the compositor treats as "let the
-// acrylic through" (see applyChrome), and colSurface is whatever it likes only
-// so long as it is not black -- an opaque colour is what makes a control solid
-// over that acrylic.
+// It did not used to be. The window sat on an acrylic blur until 2026-10-27,
+// and the background had to be *black* because black is what the compositor
+// reads as "nothing painted here, show the material". That is why the window
+// and the list behind the rows were once the same colour and could not be
+// separated. They can be now, and the depth comes from three flat values
+// instead: the window, a panel on it, and a row highlighted on the panel.
 var (
-	colGlass   = win.RGB(0x00, 0x00, 0x00) // see applyChrome: black == show the acrylic backdrop
-	colBg      = colGlass                  // window background, and the list behind the rows
-	colSurface = win.RGB(0x1c, 0x1c, 0x1c) // the solid panels: search box, editor, request, response
-	colText    = win.RGB(0xe8, 0xe8, 0xe8) // primary text
-	colBorder  = colNoBorder               // the window's outer border: none
-	colSel     = win.RGB(0x2b, 0x2b, 0x2b) // highlighted row and the active tab
-	colSelDim  = win.RGB(0x2b, 0x2b, 0x2b) // highlighted row in the list that is not taking the arrow keys
-	colSelText = win.RGB(0xff, 0xff, 0xff) // text on a highlighted row
-	colTextDim = win.RGB(0x9a, 0x9a, 0x9a) // the inactive tab
-	colScroll  = win.RGB(0x4e, 0x4e, 0x4e) // the overlay scrollbar thumb
-	colTextSel = win.RGB(0x3a, 0x3a, 0x3a) // selected text in the search box and the panes
+	colBg      = win.RGB(0x09, 0x09, 0x0b) // window background, and the list behind the rows
+	colSurface = win.RGB(0x18, 0x18, 0x1b) // the panels: search box, editor, request, response
+	colText    = win.RGB(0xfa, 0xfa, 0xfa) // primary text
+	colBorder  = win.RGB(0x27, 0x27, 0x2a) // the window's outer border: one pixel
+	colSel     = win.RGB(0x27, 0x27, 0x2a) // highlighted row and the active tab
+	colSelDim  = win.RGB(0x27, 0x27, 0x2a) // highlighted row in the list that is not taking the arrow keys
+	colSelText = win.RGB(0xfa, 0xfa, 0xfa) // text on a highlighted row
+	colTextDim = win.RGB(0xa1, 0xa1, 0xaa) // the inactive tab
+	colScroll  = win.RGB(0x52, 0x52, 0x5b) // the overlay scrollbar thumb
 )
 
-// colTextSel is the third structural colour, and the reason it is a grey rather
-// than a blue is the caret.
+// There is no colour here for a text selection, and that is a decision rather
+// than an omission. A selection is painted by the control in the system
+// highlight colour -- the Windows accent -- and nothing overrides it: the
+// colours a window hands back from WM_CTLCOLOREDIT are the unselected pair, and
+// an edit has no message for the other one.
 //
-// Windows draws a caret by inverting the pixels under it -- there is no colour
-// to set -- so the caret is whatever the background it stands on is not. Over
-// the panes (#1c1c1c) that comes out near-white, which is what a caret is
-// expected to look like; over the system highlight (#0078d4 here) it comes out
-// #ff872b, and a caret that turns orange the moment you select something is the
-// thing this colour exists to fix. Keep it a grey close to the surface and the
-// caret stays the colour it was. A blue selection means an orange caret again,
-// and no code anywhere can decide otherwise.
-//
-// acrylicTint is the colour laid over the blur, and the one number here that is
-// not a COLORREF: it is AABBGGRR, alpha first, and the alpha is what decides how
-// much of the desktop comes through. Lower it for more of the desktop and less
-// of the tint; at zero the window is a clear pane of glass and unreadable.
-var acrylicTint uint32 = 0xB0_1A_1A_1A
+// It was recoloured to a grey afterwards until 2026-10-27, so that the caret
+// kept its colour -- Windows draws a caret by inverting the pixels under it, so
+// over the accent it comes out #ff872b and a selection means an orange caret.
+// That is gone, and the caret is orange again. A recolour can only ever arrive
+// after the control has painted the blue, and at the speed a mouse drag
+// repaints, what you see is both of them, over and over. The only real fix is
+// to draw the text ourselves, which is a milestone and not a colour. Gotcha 59.
 
 // fontFace and fontPt set the UI font. Segoe UI is what the rest of Windows 11
 // uses; the default GUI font is a decade older and looks it.
@@ -72,7 +68,6 @@ const (
 // destroyed with the window -- GDI handles are a finite system resource, so
 // creating them per paint is a leak that eventually takes down the desktop.
 type theme struct {
-	sel     *winapi.Selection
 	bg      win.HBRUSH
 	surface win.HBRUSH
 	accent  win.HBRUSH
@@ -92,28 +87,9 @@ func solidBrush(c win.COLORREF) (win.HBRUSH, error) {
 // solidPen creates a one-pixel pen. RoundRect outlines with the current pen and
 // fills with the current brush, so every rounded shape here needs a pen of its
 // own fill colour -- leave the stock black pen selected and the shape comes out
-// with a dark ring around it, which over the acrylic backdrop is not a ring but
-// a hole.
+// with a dark ring around it.
 func solidPen(c win.COLORREF) (win.HPEN, error) {
 	return win.CreatePen(co.PS_SOLID, 1, c)
-}
-
-// selectionRemap is the pair of blends winapi.MakeOpaque rewrites: what the
-// control paints a selection in, and what it should look like instead.
-//
-// The system colours are read once, here, rather than baked in -- the highlight
-// colour is the Windows accent and the user can change it, and reading it is
-// what makes the "from" end right whatever they have chosen.
-func selectionRemap() *winapi.Selection {
-	rgb := func(c win.COLORREF) uint32 {
-		return uint32(c.Red())<<16 | uint32(c.Green())<<8 | uint32(c.Blue())
-	}
-	return &winapi.Selection{
-		FromBg: rgb(win.GetSysColor(co.COLOR_HIGHLIGHT)),
-		FromFg: rgb(win.GetSysColor(co.COLOR_HIGHLIGHTTEXT)),
-		ToBg:   rgb(colTextSel),
-		ToFg:   rgb(colSelText),
-	}
 }
 
 func newTheme() (*theme, error) {
@@ -161,8 +137,7 @@ func newTheme() (*theme, error) {
 	}
 
 	return &theme{
-		sel: selectionRemap(),
-		bg:  bg, surface: surface, accent: accent,
+		bg: bg, surface: surface, accent: accent,
 		accPen: accPen, dimPen: dimPen,
 		scroll: scroll, scrPen: scrPen,
 		font: font,
@@ -189,22 +164,28 @@ func (t *theme) applyFont(h win.HWND) {
 }
 
 // applyChrome asks for modern window decoration: rounded corners, dark
-// scrollbars and context menus, a subtle border, and the acrylic behind the
-// whole window.
+// scrollbars and context menus, and a one-pixel border.
 //
-// The acrylic is what makes the palette glass, and it is composited
-// *underneath* the window's own painting -- so it shows only where the window
-// paints nothing. GDI has no alpha channel and leaves that byte at zero, which
-// the compositor reads as exactly that: nothing painted. So colGlass is black
-// on purpose, and anything meant to stay solid has its alpha put back by
-// winapi.MakeOpaque afterwards. Change colGlass to a near-black grey and the
-// transparency silently disappears.
+// **The window is opaque, and that is a change.** It sat on a real acrylic blur
+// until 2026-10-27, through the undocumented SetWindowCompositionAttribute --
+// which worked, and cost more than it was worth. GDI has no alpha channel, so
+// the compositor read every pixel the window painted as "nothing here"; keeping
+// a control solid meant copying its finished pixels out, setting the alpha byte
+// and copying them back, after every paint. That pass could only ever run
+// *after* the control had painted, and a control dragging out a selection
+// repaints without going through WM_PAINT at all -- so a composition frame
+// landing in the gap showed the backdrop straight through the selected lines.
+// Flat colour has no gap to land in. Gotcha 59, and the whole of winapi's
+// opaque.go and acrylic.go went with it.
 //
-// The three DWM attributes are Windows 11 only and fail harmlessly on 10,
-// leaving square corners. The acrylic is not a DWM attribute at all, for
-// reasons measured and written down in winapi.SetAcrylic. Every failure is
-// returned rather than swallowed so that a flat, square window has a stated
-// reason instead of being a mystery; the caller logs them and carries on.
+// The border matters more than it looks now. A flat dark window over a dark
+// desktop has nothing to separate it from the wallpaper, and the blur used to
+// do that work; colBorder is what does it instead.
+//
+// All three attributes are Windows 11 only and fail harmlessly on 10, leaving
+// square corners. Every failure is returned rather than swallowed so that a
+// square window has a stated reason instead of being a mystery; the caller logs
+// them and carries on.
 func applyChrome(h win.HWND) []error {
 	var errs []error
 	set := func(what string, a win.DwmAttr) {
@@ -215,12 +196,6 @@ func applyChrome(h win.HWND) []error {
 	set("dark mode", win.DwmAttrUseImmersiveDarkMode(true))
 	set("rounded corners", win.DwmAttrWindowCornerPreference(co.DWMWCP_ROUND))
 	set("border colour", win.DwmAttrBorderColor(colBorder))
-	// The acrylic itself. Not a DWM attribute: see winapi.SetAcrylic for why the
-	// two documented routes do not work on a GDI window, and what was measured
-	// before settling on this one.
-	if !winapi.SetAcrylic(uintptr(h), acrylicTint) {
-		errs = append(errs, fmt.Errorf("acrylic: SetWindowCompositionAttribute refused"))
-	}
 	return errs
 }
 
@@ -238,10 +213,10 @@ func darkenScrollbars(h win.HWND) {
 // paintControlBackground handles WM_CTLCOLOR* for a control, colouring its text
 // and background and handing back the brush Windows should fill it with.
 //
-// This is the *solid* path: the search box and the editing panes take it, and
-// the opaque surface colour is what stops the backdrop showing through them.
-// Text is far harder to read over moving glass than over a flat panel, so
-// anything holding text you type or read at length is painted, not glazed.
+// This is the *panel* path: the search box and the editing panes take it, and
+// the surface colour is what lifts them off the window behind them. Anything
+// holding text you type or read at length is a panel; the window and the list
+// are the ground it sits on.
 //
 // Returning the brush is the part that is easy to miss: setting the colours on
 // the device context alone leaves the control's unpainted area the default
@@ -255,8 +230,8 @@ func (t *theme) paintControlBackground(m ui.Wm) uintptr {
 
 // paintTab colours one of the mode tabs. The active one is filled with the
 // accent colour, which is the same fill the highlighted row uses -- the two
-// together are what say "this list is showing this mode". An inactive tab is
-// left on glass, so the five tabs read as one label lit and four floating.
+// together are what say "this list is showing this mode". An inactive tab takes
+// the window background, so the tabs read as one label lit and the rest bare.
 func (t *theme) paintTab(m ui.Wm, active bool) uintptr {
 	hdc := win.HDC(m.WParam)
 	if active {
@@ -265,7 +240,7 @@ func (t *theme) paintTab(m ui.Wm, active bool) uintptr {
 		return uintptr(t.accent)
 	}
 	hdc.SetTextColor(colTextDim)
-	hdc.SetBkColor(colGlass)
+	hdc.SetBkColor(colBg)
 	return uintptr(t.bg)
 }
 
@@ -275,7 +250,7 @@ func (t *theme) paintTab(m ui.Wm, active bool) uintptr {
 func (t *theme) paintChainLabel(m ui.Wm) uintptr {
 	hdc := win.HDC(m.WParam)
 	hdc.SetTextColor(colTextDim)
-	hdc.SetBkColor(colGlass)
+	hdc.SetBkColor(colBg)
 	return uintptr(t.bg)
 }
 
@@ -301,12 +276,14 @@ func setCueBanner(h win.HWND, text string) {
 // darkenListView recolours a list view, which ignores WM_CTLCOLOR entirely and
 // has to be told its colours through its own messages.
 //
-// The background is the glass colour: the rows are owner-drawn (see drawRow)
-// and paint no background of their own, so what is behind an unhighlighted row
-// is whatever this erases the control with, and black is the backdrop.
+// The background is the window colour, not the panel colour: the rows are
+// owner-drawn (see drawRow) and paint no background of their own, so what is
+// behind an unhighlighted row is whatever this erases the control with. The
+// list reads as part of the window, with the highlighted row as the only panel
+// in it.
 func darkenListView(h win.HWND) {
-	h.SendMessage(co.LVM_SETBKCOLOR, 0, win.LPARAM(colGlass))
-	h.SendMessage(co.LVM_SETTEXTBKCOLOR, 0, win.LPARAM(colGlass))
+	h.SendMessage(co.LVM_SETBKCOLOR, 0, win.LPARAM(colBg))
+	h.SendMessage(co.LVM_SETTEXTBKCOLOR, 0, win.LPARAM(colBg))
 	h.SendMessage(co.LVM_SETTEXTCOLOR, 0, win.LPARAM(colText))
 }
 

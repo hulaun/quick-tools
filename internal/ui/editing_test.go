@@ -14,6 +14,8 @@ func TestEditCharsSwallowsCommandKeys(t *testing.T) {
 		0x7f: "Ctrl+Backspace -- would insert DEL and show a box glyph",
 		0x13: "Ctrl+S",
 		0x01: "Ctrl+A",
+		0x0d: "Enter -- a single-line Edit beeps on it otherwise",
+		0x1b: "Esc -- same",
 	}
 	for ch, why := range swallowed {
 		if !editChars(ch) {

@@ -237,6 +237,10 @@ func editChars(ch uint16) bool {
 	switch ch {
 	case 0x7f, 0x13, 0x01: // Ctrl+Backspace, Ctrl+S, Ctrl+A
 		return true
+	case 0x0d, 0x1b: // Enter, Esc -- both are already handled on WM_KEYDOWN;
+		// left unswallowed here, a single-line Edit beeps on the character it
+		// cannot otherwise do anything with.
+		return true
 	case 0x09: // Tab
 		// Tab is a command in every mode -- chain a transform, move into the note,
 		// move into the action list -- and never a character. Handling it in

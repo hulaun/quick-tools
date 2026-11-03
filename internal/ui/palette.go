@@ -53,12 +53,11 @@ const (
 	paneRadius   = 8           // the lists and the right-hand panes
 
 	// The window's own corners are the desktop window manager's and cannot be
-	// made rounder. DWMWCP_ROUND is a fixed 8 with no attribute for more; a
-	// region does not round these windows at all (see maskCorners); and painting
-	// the corners out, which is what rounds everything else here, cannot work on
-	// the window itself -- the acrylic is drawn behind the whole window
-	// rectangle, so painting a corner transparent just shows more acrylic. The
-	// palette is as round as Windows will make it.
+	// made rounder. DWMWCP_ROUND is a fixed 8 with no attribute for more, and a
+	// region does not round these windows at all (see maskCorners). Painting the
+	// corners out, which is what rounds everything else here, is not available
+	// either: there is nothing behind the window to paint them *to*. The palette
+	// is as round as Windows will make it.
 
 	// textPad is the left inset for text inside the search box and the panes.
 	// A Win32 edit puts its text hard against the frame, which read as cramped
@@ -269,6 +268,7 @@ type Palette struct {
 	// One field for every control, because mouse capture means only one of them
 	// can be in a drag at a time.
 	sbDrag scrollDrag
+
 
 	// shown guards against re-entering hide() while hiding, which the
 	// WM_ACTIVATE handler would otherwise cause.
@@ -666,9 +666,11 @@ func (p *Palette) events() {
 		return p.wnd.Hwnd().DefWindowProc(co.WM_SYSCOMMAND, m.WParam, m.LParam)
 	})
 
-	// Clicking away dismisses the palette, the same as Esc.
+	// Clicking away dismisses the palette, the same as Esc -- unless pinned,
+	// in which case it stays up (and stays topmost, which the window already
+	// is unconditionally). Esc and Enter still hide it either way.
 	p.wnd.On().Wm(co.WM_ACTIVATE, func(m ui.Wm) uintptr {
-		if m.WParam.LoWord() == 0 { // WA_INACTIVE
+		if m.WParam.LoWord() == 0 && !p.cfg.Pinned { // WA_INACTIVE
 			p.hide(false)
 		}
 		return 0
@@ -1021,21 +1023,24 @@ func (p *Palette) events() {
 	})
 
 
-	// How each control meets the acrylic backdrop, and which of them carry the
-	// overlay scrollbar. Solid is everything holding text that is read or typed;
-	// the two lists and the window background are the glass. Subclassing has to
-	// be asked for before a control exists, which is why this is here and not in
-	// applyLook with the rest of the appearance work -- see wireSurface.
-	glass := func() win.HBRUSH { return p.theme.bg }
-	solid := func() win.HBRUSH { return p.theme.surface }
+	// What each control does after it paints: which of them carry the overlay
+	// scrollbar, whose text is redrawn inset, and which have their corners
+	// painted out. fill is what colour the scrollbar's strip is erased with --
+	// the window background for a list, the panel colour for an editor, which is
+	// what makes the thumb look like it floats over the right thing.
+	//
+	// Subclassing has to be asked for before a control exists, which is why this
+	// is here and not in applyLook with the rest of the appearance work -- see
+	// wireSurface.
+	window := func() win.HBRUSH { return p.theme.bg }
+	panel := func() win.HBRUSH { return p.theme.surface }
 	for _, s := range []surface{
-		{ctrl: p.list, scrolls: true, fill: glass, radius: paneRadius},
-		{ctrl: p.preview, solid: true, scrolls: true, fill: solid, radius: paneRadius},
-		{ctrl: p.reqPane, solid: true, scrolls: true, fill: solid, radius: paneRadius},
-		{ctrl: p.respPane, solid: true, scrolls: true, fill: solid, radius: paneRadius},
-		{ctrl: p.search, solid: true, radius: searchRadius},
-		{ctrl: p.nameEdit, solid: true},
-		{ctrl: p.statusLabel, solid: true, radius: paneRadius,
+		{ctrl: p.list, scrolls: true, fill: window, radius: paneRadius},
+		{ctrl: p.preview, scrolls: true, fill: panel, radius: paneRadius},
+		{ctrl: p.reqPane, scrolls: true, fill: panel, radius: paneRadius},
+		{ctrl: p.respPane, scrolls: true, fill: panel, radius: paneRadius},
+		{ctrl: p.search, radius: searchRadius},
+		{ctrl: p.statusLabel, radius: paneRadius,
 			label: co.DT_LEFT | co.DT_SINGLELINE | co.DT_VCENTER | co.DT_END_ELLIPSIS | co.DT_NOPREFIX},
 	} {
 		p.wireSurface(s)
@@ -1069,8 +1074,7 @@ func (p *Palette) drawRow(lv *ui.ListView, nm *win.NMLVCUSTOMDRAW, sel int, acti
 		rc := lv.Item(row).ItemRect(co.LVIR_BOUNDS)
 		// The row's own background has already been erased in the list's
 		// background colour by the time the item is drawn, so an unhighlighted
-		// row needs no fill at all -- which is what leaves the backdrop showing
-		// through it.
+		// row needs no fill at all.
 		text := colText
 		if row == sel {
 			brush, pen := p.theme.accent, p.theme.accPen

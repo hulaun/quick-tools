@@ -19,6 +19,14 @@ type Config struct {
 	// config.json to have the paste happen automatically.
 	AutoPaste bool `json:"autoPaste"`
 
+	// Pinned stops the palette hiding itself when another window is clicked.
+	// The window is topmost unconditionally (see palette.go's WndExStyle), so
+	// this is the other half of "always on top and doesn't go away" -- it
+	// defaults to off because the click-away dismiss is what makes the palette
+	// behave like a normal popup the rest of the time. Esc and Enter still hide
+	// it regardless; this only suppresses the WM_ACTIVATE auto-hide.
+	Pinned bool `json:"pinned"`
+
 	// Every path below is relative to Root by default -- the folder holding the
 	// exe, or its parent when the exe is in bin/ -- so the whole thing stays
 	// portable: copy the folder and your transforms and notes come with it.
@@ -56,6 +64,7 @@ func Default() Config {
 	return Config{
 		Hotkey:      "Ctrl+Alt+Q",
 		AutoPaste:   false,
+		Pinned:      false,
 		ScriptsDir:  "scripts",
 		SnippetsDir: "storage/snippets",
 		MacrosFile:  "storage/macros.json",
