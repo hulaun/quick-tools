@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"strings"
 	"testing"
 	"time"
@@ -280,6 +281,31 @@ func TestHasScheme(t *testing.T) {
 	for _, s := range no {
 		if hasScheme(s) {
 			t.Errorf("hasScheme(%q) = true, want false", s)
+		}
+	}
+}
+
+// TestSendManyOverlaps: the requests must be in flight together. A handler that
+// only answers once all n have arrived deadlocks (and times out) if they are
+// sent one after another.
+func TestSendManyOverlaps(t *testing.T) {
+	const n = 4
+	var arrived sync.WaitGroup
+	arrived.Add(n)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		arrived.Done()
+		arrived.Wait()
+		w.WriteHeader(201)
+	}))
+	defer srv.Close()
+
+	got := SendMany(context.Background(), Request{Method: "POST", URL: srv.URL, Timeout: 5 * time.Second}, n)
+	if len(got) != n {
+		t.Fatalf("got %d results, want %d", len(got), n)
+	}
+	for i, r := range got {
+		if r.Err != nil || r.Resp.Status != 201 {
+			t.Errorf("result %d = %v, %v", i, r.Resp.Status, r.Err)
 		}
 	}
 }

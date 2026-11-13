@@ -47,7 +47,17 @@ type Request struct {
 	// there is no global switch, so turning it off for one endpoint can never
 	// quietly turn it off for the rest.
 	Insecure bool
+
+	// Repeat is how many times the request is sent when Enter is pressed, from
+	// "# @repeat 2". 0 and 1 both mean once. More than one are fired at the same
+	// instant rather than one after another, because the reason to want several is
+	// reproducing a race: two clients inserting the same unique value.
+	Repeat int
 }
+
+// MaxRepeat caps "# @repeat". It is a race reproducer, not a load tool, and a
+// typo of an extra zero should not open a thousand connections.
+const MaxRepeat = 50
 
 // Header is one header line, kept as written.
 type Header struct {
@@ -235,6 +245,12 @@ func (r *Request) directive(line string) error {
 			return err
 		}
 		r.Timeout = d
+	case "repeat":
+		n, err := strconv.Atoi(value)
+		if err != nil || n < 1 || n > MaxRepeat {
+			return fmt.Errorf("@repeat needs a whole number from 1 to %d, as in \"# @repeat 2\"", MaxRepeat)
+		}
+		r.Repeat = n
 	}
 	// An unknown directive is ignored rather than rejected: these files are
 	// shared with other tools that have directives of their own, and refusing to

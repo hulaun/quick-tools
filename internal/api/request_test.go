@@ -234,3 +234,15 @@ func TestRequestGet(t *testing.T) {
 		t.Error("Get(Accept) found a header that is not there")
 	}
 }
+
+func TestRepeatDirective(t *testing.T) {
+	r, err := Parse("# @repeat 3\nPOST http://h/x")
+	if err != nil || r.Repeat != 3 {
+		t.Fatalf("repeat = %d, err = %v", r.Repeat, err)
+	}
+	for _, bad := range []string{"0", "-1", "two", "", "9999"} {
+		if _, err := Parse("# @repeat " + bad + "\nGET http://h/x"); err == nil || !strings.Contains(err.Error(), "@repeat") {
+			t.Errorf("@repeat %q: err = %v", bad, err)
+		}
+	}
+}

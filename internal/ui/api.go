@@ -334,13 +334,21 @@ func (p *Palette) sendRequest() {
 		}
 	}
 
-	p.setStatus("sending...")
+	if req.Repeat > 1 {
+		p.setStatus(fmt.Sprintf("sending %d at once...", req.Repeat))
+	} else {
+		p.setStatus("sending...")
+	}
 	p.setPaneText(p.respPane, "")
 	p.sender.start(p.wnd.Hwnd(), req)
 }
 
 // finishSend handles a completed send, back on the UI thread.
 func (p *Palette) finishSend(res sendResult) {
+	if len(res.all) > 1 {
+		p.finishRepeat(res)
+		return
+	}
 	if res.err != nil {
 		p.setStatus("error: " + res.err.Error())
 		p.setPaneText(p.respPane, "")
@@ -369,6 +377,47 @@ func (p *Palette) finishSend(res sendResult) {
 		}
 	}
 
+	p.setStatus(status)
+}
+
+// finishRepeat shows the outcome of a request sent several times at once.
+//
+// The status strip carries one status per call in launch order, which is what
+// answers "did both succeed?" at a glance; the pane carries each body under a
+// numbered heading, since the interesting case is usually that two calls got
+// different answers.
+func (p *Palette) finishRepeat(res sendResult) {
+	var codes []string
+	var body strings.Builder
+	for i, r := range res.all {
+		var head string
+		if r.Err != nil {
+			codes = append(codes, "err")
+			head = fmt.Sprintf("#%d  error: %v\n", i+1, r.Err)
+		} else {
+			codes = append(codes, fmt.Sprint(r.Resp.Status))
+			head = fmt.Sprintf("#%d  %d %s  %s  %s\n", i+1, r.Resp.Status,
+				r.Resp.StatusText, formatDuration(r.Resp.Elapsed), formatSize(r.Resp.Size))
+		}
+		body.WriteString(head)
+		if r.Err == nil {
+			body.WriteString(r.Resp.Body)
+			body.WriteString("\n")
+		}
+		body.WriteString("\n")
+	}
+	p.setPaneText(p.respPane, body.String())
+
+	status := fmt.Sprintf("x%d  %s", len(res.all), strings.Join(codes, " "))
+	if res.hook != "" && res.err == nil {
+		changed, err := api.RunHook(res.hook, res.resp, p.env)
+		switch {
+		case err != nil:
+			status += "   hook: " + err.Error()
+		case len(changed) > 0:
+			status += "   set " + strings.Join(changed, ", ")
+		}
+	}
 	p.setStatus(status)
 }
 

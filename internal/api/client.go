@@ -125,6 +125,39 @@ func Send(ctx context.Context, r Request) (Response, error) {
 	return out, nil
 }
 
+// Result is one send's outcome, for SendMany.
+type Result struct {
+	Resp Response
+	Err  error
+}
+
+// SendMany sends the same request n times at once and returns the outcomes in
+// launch order.
+//
+// Every goroutine is built and then held at a gate that is opened once, so the
+// requests leave as close together as the scheduler allows -- the point is to
+// make two inserts overlap on the server. Connections are separate: the
+// transport opens one per concurrent request.
+func SendMany(ctx context.Context, r Request, n int) []Result {
+	if n < 1 {
+		n = 1
+	}
+	out := make([]Result, n)
+	gate := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range out {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-gate
+			out[i].Resp, out[i].Err = Send(ctx, r)
+		}()
+	}
+	close(gate)
+	wg.Wait()
+	return out
+}
+
 // sendError turns the transport's error into one worth showing.
 //
 // A timeout and a cancellation arrive as the same "context deadline exceeded"

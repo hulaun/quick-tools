@@ -119,6 +119,11 @@ type sendResult struct {
 	resp api.Response
 	err  error
 
+	// all holds every outcome when the request was sent more than once
+	// ("# @repeat"); resp and err then mirror the last one that succeeded, so the
+	// hook and anything else reading them still see a single answer.
+	all []api.Result
+
 	// hook is the request's post-response block, carried through so the UI
 	// thread can run it. It runs there rather than on the worker because it
 	// writes to the environment, which the window reads -- and it is a
@@ -159,7 +164,21 @@ func (s *sender) start(hwnd win.HWND, req api.Request) uint64 {
 	s.mu.Unlock()
 
 	go func() {
-		resp, err := api.Send(ctx, req)
+		var resp api.Response
+		var err error
+		var all []api.Result
+		if req.Repeat > 1 {
+			all = api.SendMany(ctx, req, req.Repeat)
+			err = all[0].Err
+			resp = all[0].Resp
+			for _, r := range all {
+				if r.Err == nil {
+					resp, err = r.Resp, nil
+				}
+			}
+		} else {
+			resp, err = api.Send(ctx, req)
+		}
 		cancel() // release the context's resources whatever happened
 
 		s.mu.Lock()
@@ -168,7 +187,7 @@ func (s *sender) start(hwnd win.HWND, req api.Request) uint64 {
 		// arriving late must not overwrite it.
 		current := seq == s.seq
 		if current {
-			s.results[seq] = sendResult{resp: resp, err: err, hook: req.Hook}
+			s.results[seq] = sendResult{resp: resp, err: err, all: all, hook: req.Hook}
 			s.stop = nil
 		}
 		s.mu.Unlock()

@@ -935,9 +935,17 @@ func (p *Palette) events() {
 	// Swallow the characters those shortcuts would otherwise insert. Ctrl+
 	// Backspace inserts DEL and Ctrl+S inserts 0x13; an Edit has no idea what
 	// either means and puts a box glyph in the text.
-	swallow := func(c *ui.Edit) func(ui.Wm) uintptr {
+	//
+	// Enter is only a command in the single-line search box. In a multiline
+	// pane (the note editor, the request editor) it is the line break itself,
+	// so its character must reach the control.
+	swallow := func(c *ui.Edit, multiline bool) func(ui.Wm) uintptr {
 		return func(m ui.Wm) uintptr {
-			if editChars(uint16(m.WParam)) {
+			ch := uint16(m.WParam)
+			if multiline && ch == 0x0d {
+				return c.Hwnd().DefSubclassProc(co.WM_CHAR, m.WParam, m.LParam)
+			}
+			if editChars(ch) {
 				return 0
 			}
 			return c.Hwnd().DefSubclassProc(co.WM_CHAR, m.WParam, m.LParam)
@@ -947,10 +955,10 @@ func (p *Palette) events() {
 	// Chaining used to live on Space, which meant a space could only be typed
 	// into the search box with Shift held. Tab does the same job without taking
 	// a printable character away from the query, so Space is now just a space.
-	p.search.OnSubclass().Wm(co.WM_CHAR, swallow(p.search))
-	p.preview.OnSubclass().Wm(co.WM_CHAR, swallow(p.preview))
-	p.reqPane.OnSubclass().Wm(co.WM_CHAR, swallow(p.reqPane))
-	p.respPane.OnSubclass().Wm(co.WM_CHAR, swallow(p.respPane))
+	p.search.OnSubclass().Wm(co.WM_CHAR, swallow(p.search, false))
+	p.preview.OnSubclass().Wm(co.WM_CHAR, swallow(p.preview, true))
+	p.reqPane.OnSubclass().Wm(co.WM_CHAR, swallow(p.reqPane, true))
+	p.respPane.OnSubclass().Wm(co.WM_CHAR, swallow(p.respPane, true))
 
 	// Typing in the editor marks the note unsaved. quiet is set while the editor
 	// is being filled from a file, which raises the same notification.
